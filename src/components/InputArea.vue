@@ -639,8 +639,9 @@ export default {
             '--btn-hover-bg': props.attachmentButtonHoverBgColor,
         }));
 
-        const syncRichEditor = () => {
+        const syncRichEditor = (preserveCaret = true) => {
             if (!props.allowRichText || !richInputRef.value) return;
+            const caret = preserveCaret ? getCaretOffsetFromRich() : plainTextValue.value.length;
             isSyncingRich.value = true;
             const html = formatRichText(
                 inputValue.value || '',
@@ -652,6 +653,7 @@ export default {
             richInputRef.value.innerHTML = html || '';
             plainTextValue.value = richInputRef.value.textContent?.replace(/\u00a0/g, ' ') || '';
             nextTick(() => {
+                setCaretOffsetInRich(caret);
                 isSyncingRich.value = false;
             });
         };
@@ -664,8 +666,8 @@ export default {
                     plainTextValue.value = inputValue.value;
                     nextTick(() => {
                         const textarea = textareaRef.value;
+                        const length = inputValue.value.length;
                         if (textarea) {
-                            const length = inputValue.value.length;
                             textarea.setSelectionRange(length, length);
                             updateSelection();
                         }
@@ -674,6 +676,7 @@ export default {
                 } else {
                     syncRichEditor();
                     nextTick(() => {
+                        setCaretOffsetInRich(plainTextValue.value.length);
                         processMentionState(plainTextValue.value, plainTextValue.value.length);
                     });
                 }
@@ -686,10 +689,11 @@ export default {
                 if (newMessage) {
                     inputValue.value = newMessage.text || '';
                     if (props.allowRichText) {
-                        syncRichEditor();
+                        syncRichEditor(false);
                         nextTick(() => {
                             if (richInputRef.value) {
                                 focusTextarea();
+                                setCaretOffsetInRich(plainTextValue.value.length);
                                 processMentionState(plainTextValue.value, plainTextValue.value.length);
                             }
                         });
@@ -804,12 +808,15 @@ export default {
 
         const handleRichInput = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
+            const caret = getCaretOffsetFromRich();
             const html = richInputRef.value.innerHTML;
             const { markdown, plainText } = convertHtmlToMarkdown(html);
             inputValue.value = markdown;
             plainTextValue.value = plainText;
-            const caret = getCaretOffsetFromRich();
             processMentionState(plainText, caret);
+            nextTick(() => {
+                setCaretOffsetInRich(caret);
+            });
         };
 
         const handleRichKeyDown = (event) => {
@@ -823,9 +830,9 @@ export default {
         };
 
         const getCaretOffsetFromRich = () => {
-            const frontWindow = getFrontWindow();
-            const selection = frontWindow.getSelection();
-            if (!selection || selection.rangeCount === 0) {
+            const win = getFrontWindow();
+            const selection = win.getSelection();
+            if (!selection || selection.rangeCount === 0 || !richInputRef.value) {
                 return plainTextValue.value.length;
             }
             const range = selection.getRangeAt(0);
@@ -833,6 +840,47 @@ export default {
             preRange.selectNodeContents(richInputRef.value);
             preRange.setEnd(range.endContainer, range.endOffset);
             return preRange.toString().length;
+        };
+
+        const setCaretOffsetInRich = (offset) => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            const doc = getFrontDocument();
+            const win = getFrontWindow();
+            const selection = win.getSelection();
+            if (!selection) return;
+
+            let remaining = Math.max(0, Math.min(offset, plainTextValue.value.length));
+            const walker = doc.createTreeWalker(richInputRef.value, NodeFilter.SHOW_TEXT, null);
+            let node = walker.nextNode();
+            let foundNode = null;
+            let nodeOffset = 0;
+
+            while (node) {
+                const nodeLength = node.nodeValue?.length ?? 0;
+                if (remaining <= nodeLength) {
+                    foundNode = node;
+                    nodeOffset = remaining;
+                    break;
+                }
+                remaining -= nodeLength;
+                node = walker.nextNode();
+            }
+
+            if (!foundNode) {
+                foundNode = richInputRef.value;
+                nodeOffset = richInputRef.value.childNodes?.length || 0;
+            }
+
+            const range = doc.createRange();
+            if (foundNode.nodeType === Node.TEXT_NODE) {
+                range.setStart(foundNode, nodeOffset);
+            } else {
+                range.selectNodeContents(foundNode);
+                range.collapse(false);
+            }
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
         };
 
         const processMentionState = (text, cursorPos) => {
