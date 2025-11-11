@@ -59,6 +59,7 @@
                 :delete-icon="deleteIcon"
                 :delete-icon-color="deleteIconColor"
                 :delete-icon-size="deleteIconSize"
+                :allow-rich-text="allowRichText"
                 @attachment-click="handleAttachmentClick"
                 @message-right-click="handleMessageRightClick"
                 @message-edit="handleMessageEdit"
@@ -1166,6 +1167,9 @@ export default {
             // Mentions
             mentionsColor: computed(() => props.content?.mentionsColor || '#3b82f6'),
             mentionsBgColor: computed(() => props.content?.mentionsBgColor || '#dbeafe'),
+
+            // Rich text
+            allowRichText: computed(() => props.content?.allowRichText !== false),
 
             // Input action alignment and button styles
             actionAlign: computed(() => props.content?.inputActionAlign || 'end'),

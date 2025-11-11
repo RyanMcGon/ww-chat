@@ -1,0 +1,169 @@
+/**
+ * Formats text with rich text support (markdown-like) while preserving mentions
+ * Supports: **bold**, *italic*, `code`, [links](url), ~~strikethrough~~
+ */
+
+/**
+ * Escape HTML special characters
+ */
+const escapeHtml = (text) => {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
+/**
+ * Process rich text formatting in a text segment
+ */
+const processRichText = (text, allowRichText = true) => {
+    if (!text || !allowRichText) {
+        return escapeHtml(text);
+    }
+
+    let result = escapeHtml(text);
+
+    // Store placeholders for protected content to prevent nested processing
+    const codeBlocks = [];
+    const strikeBlocks = [];
+    let codeIndex = 0;
+    let strikeIndex = 0;
+
+    // Protect inline code first (has highest priority, prevents other formatting)
+    result = result.replace(/`([^`\n]+?)`/g, (match, code) => {
+        const placeholder = `__CODE_${codeIndex}__`;
+        codeBlocks.push(`<code>${code}</code>`);
+        codeIndex++;
+        return placeholder;
+    });
+
+    // Protect strikethrough
+    result = result.replace(/~~([^~\n]+?)~~/g, (match, content) => {
+        const placeholder = `__STRIKE_${strikeIndex}__`;
+        strikeBlocks.push(`<s>${content}</s>`);
+        strikeIndex++;
+        return placeholder;
+    });
+
+    // Process bold: **text** or __text__ (must have at least one character, not newlines)
+    // Process bold before italic to avoid conflicts
+    result = result.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+    result = result.replace(/__([^_\n]+?)__/g, '<strong>$1</strong>');
+
+    // Process italic: *text* or _text_ (single markers)
+    // Since bold (**text** and __text__) is already processed and replaced,
+    // any remaining single * or _ markers should be italic
+    // Match single asterisk - content shouldn't contain *, newlines, or HTML entities
+    result = result.replace(/\*([^*\n&<>]+?)\*/g, '<em>$1</em>');
+    
+    // Match single underscore for italic
+    // Use word boundary to avoid matching in the middle of words like "test_text"
+    // But also allow matching when not at word boundaries for cases like "text_text"
+    result = result.replace(/([^_a-zA-Z0-9]|^)_([^_\n&<>]+?)_([^_a-zA-Z0-9]|$)/g, '$1<em>$2</em>$3');
+
+    // Process links: [text](url)
+    result = result.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // Restore protected content (code blocks first, then strikethrough)
+    codeBlocks.forEach((content, index) => {
+        result = result.replace(`__CODE_${index}__`, content);
+    });
+    strikeBlocks.forEach((content, index) => {
+        result = result.replace(`__STRIKE_${index}__`, content);
+    });
+
+    return result;
+};
+
+/**
+ * Find all mention occurrences in text
+ */
+const findMentions = (text, mentions = []) => {
+    const mentionOccurrences = [];
+
+    if (mentions && mentions.length > 0) {
+        // Use provided mentions data for precise matching
+        mentions.forEach(mention => {
+            const mentionPattern = `@${mention.name}`;
+            let index = text.indexOf(mentionPattern);
+            
+            while (index !== -1) {
+                mentionOccurrences.push({
+                    start: index,
+                    end: index + mentionPattern.length,
+                    text: mentionPattern,
+                    mention: mention
+                });
+                index = text.indexOf(mentionPattern, index + 1);
+            }
+        });
+    } else {
+        // Fallback: use regex for generic @mention detection
+        const mentionRegex = /@([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)?)(?=\s+[a-z]|\s*[,.:;!?)\n]|$)/g;
+        let match;
+        
+        while ((match = mentionRegex.exec(text)) !== null) {
+            mentionOccurrences.push({
+                start: match.index,
+                end: match.index + match[0].length,
+                text: match[0],
+                mention: { name: match[1] }
+            });
+        }
+    }
+
+    // Sort by position (earliest first)
+    mentionOccurrences.sort((a, b) => a.start - b.start);
+
+    return mentionOccurrences;
+};
+
+/**
+ * Format text with rich text support while preserving mentions
+ * @param {string} text - The text to format
+ * @param {Array} mentions - Array of mention objects with name property
+ * @param {boolean} allowRichText - Whether to enable rich text formatting
+ * @param {string} mentionsColor - Color for mentions
+ * @param {string} mentionsBgColor - Background color for mentions
+ * @returns {string} Formatted HTML string
+ */
+export const formatRichText = (text, mentions = [], allowRichText = true, mentionsColor = '#3b82f6', mentionsBgColor = '#dbeafe') => {
+    if (!text) return '';
+
+    // Find all mentions first
+    const mentionOccurrences = findMentions(text, mentions);
+
+    if (mentionOccurrences.length === 0) {
+        // No mentions, just process rich text
+        return processRichText(text, allowRichText);
+    }
+
+    // Build the result by processing text segments around mentions
+    const parts = [];
+    let lastIndex = 0;
+
+    mentionOccurrences.forEach(occurrence => {
+        // Process text before this mention with rich text formatting
+        if (occurrence.start > lastIndex) {
+            const beforeText = text.substring(lastIndex, occurrence.start);
+            parts.push(processRichText(beforeText, allowRichText));
+        }
+
+        // Add the highlighted mention (don't process rich text in mentions)
+        const escapedMention = escapeHtml(occurrence.text);
+        parts.push(`<span class="ww-message-item__mention" style="background-color: ${mentionsBgColor}; color: ${mentionsColor};">${escapedMention}</span>`);
+
+        lastIndex = occurrence.end;
+    });
+
+    // Process remaining text after last mention
+    if (lastIndex < text.length) {
+        const remainingText = text.substring(lastIndex);
+        parts.push(processRichText(remainingText, allowRichText));
+    }
+
+    return parts.join('');
+};

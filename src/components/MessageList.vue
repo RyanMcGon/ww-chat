@@ -47,6 +47,7 @@
                     :delete-icon="deleteIcon"
                     :delete-icon-color="deleteIconColor"
                     :delete-icon-size="deleteIconSize"
+                    :allow-rich-text="allowRichText"
                     @attachment-click="handleAttachmentClick"
                     @right-click="handleRightClick"
                     @edit="handleEdit"
@@ -199,6 +200,10 @@ export default {
         deleteIconSize: {
             type: String,
             default: '14px',
+        },
+        allowRichText: {
+            type: Boolean,
+            default: true,
         },
     },
     emits: ['attachment-click', 'message-right-click', 'message-edit', 'message-delete'],

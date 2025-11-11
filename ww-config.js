@@ -173,7 +173,7 @@ export default {
         ],
         customSettingsPropertiesOrder: [
             // Chat settings
-            ['chatSettingsTitle', 'groupChatText', 'groupChatAvatar', 'allowAttachments', 'disabled', 'autoScrollBehavior'],
+            ['chatSettingsTitle', 'groupChatText', 'groupChatAvatar', 'allowAttachments', 'allowRichText', 'disabled', 'autoScrollBehavior'],
             // Chat data + message mapping
             [
                 'chatDataTitle',
@@ -2314,6 +2314,23 @@ export default {
             propertyHelp: {
                 tooltip:
                     'Enables attachment uploads in the input area.\n\nPossible values: `true`, `false`',
+            },
+            /* wwEditor:end */
+        },
+        allowRichText: {
+            label: { en: 'Allow Rich Text' },
+            type: 'OnOff',
+            section: 'settings',
+            bindable: true,
+            defaultValue: true,
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'boolean',
+                tooltip: 'Whether to enable rich text formatting in messages',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Enables markdown-like formatting in messages. Supports: **bold**, *italic*, `code`, [links](url), ~~strikethrough~~. Mentions are always preserved.\n\nPossible values: `true`, `false`',
             },
             /* wwEditor:end */
         },

@@ -137,6 +137,7 @@
 <script>
 import { computed, inject, ref, watchEffect, onMounted, onUnmounted } from 'vue';
 import { formatTime } from '../utils/dateTimeFormatter';
+import { formatRichText } from '../utils/richTextFormatter';
 
 export default {
     name: 'MessageItem',
@@ -256,6 +257,10 @@ export default {
         deleteIconSize: {
             type: String,
             default: '14px',
+        },
+        allowRichText: {
+            type: Boolean,
+            default: true,
         },
     },
     emits: ['attachment-click', 'right-click', 'edit', 'delete'],
@@ -496,87 +501,14 @@ export default {
             // Get mentions from message data if available
             const mentions = props.message?.mentions || [];
             
-            // If we have mentions data, use it for precise highlighting
-            if (mentions.length > 0) {
-                // Find all mention positions in the text
-                const mentionOccurrences = [];
-                
-                mentions.forEach(mention => {
-                    const mentionPattern = `@${mention.name}`;
-                    let index = text.indexOf(mentionPattern);
-                    
-                    while (index !== -1) {
-                        mentionOccurrences.push({
-                            start: index,
-                            end: index + mentionPattern.length,
-                            text: mentionPattern,
-                            mention: mention
-                        });
-                        index = text.indexOf(mentionPattern, index + 1);
-                    }
-                });
-                
-                // Sort by position (earliest first)
-                mentionOccurrences.sort((a, b) => a.start - b.start);
-                
-                // Build the result string
-                const parts = [];
-                let lastIndex = 0;
-                
-                mentionOccurrences.forEach(occurrence => {
-                    // Add text before this mention (escape HTML)
-                    if (occurrence.start > lastIndex) {
-                        const beforeText = text.substring(lastIndex, occurrence.start);
-                        parts.push(beforeText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-                    }
-                    
-                    // Add the highlighted mention
-                    const escapedMention = occurrence.text
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;');
-                    
-                    parts.push(`<span class="ww-message-item__mention" style="background-color: ${props.mentionsBgColor}; color: ${props.mentionsColor};">${escapedMention}</span>`);
-                    
-                    lastIndex = occurrence.end;
-                });
-                
-                // Add remaining text after last mention (escape HTML)
-                if (lastIndex < text.length) {
-                    const remainingText = text.substring(lastIndex);
-                    parts.push(remainingText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-                }
-                
-                return parts.join('');
-            }
-            
-            // Fallback: use regex for generic @mention detection (up to 2 words)
-            const mentionRegex = /@([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)?)(?=\s+[a-z]|\s*[,.:;!?)\n]|$)/g;
-            const parts = [];
-            let lastIndex = 0;
-            let match;
-            
-            while ((match = mentionRegex.exec(text)) !== null) {
-                // Add text before the mention (escape HTML)
-                if (match.index > lastIndex) {
-                    const beforeText = text.substring(lastIndex, match.index);
-                    parts.push(beforeText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-                }
-                
-                // Add the mention with styling (escape the mention text)
-                const mentionText = match[0].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                parts.push(`<span class="ww-message-item__mention" style="background-color: ${props.mentionsBgColor}; color: ${props.mentionsColor};">${mentionText}</span>`);
-                
-                lastIndex = match.index + match[0].length;
-            }
-            
-            // Add remaining text after last mention (escape HTML)
-            if (lastIndex < text.length) {
-                const remainingText = text.substring(lastIndex);
-                parts.push(remainingText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-            }
-            
-            return parts.join('');
+            // Use the rich text formatter which handles both formatting and mentions
+            return formatRichText(
+                text,
+                mentions,
+                props.allowRichText,
+                props.mentionsColor,
+                props.mentionsBgColor
+            );
         });
 
         return {
@@ -650,6 +582,44 @@ export default {
             padding: 2px 4px;
             font-weight: 600;
             display: inline;
+        }
+
+        // Rich text styling
+        :deep(strong) {
+            font-weight: 600;
+        }
+
+        :deep(em) {
+            font-style: italic;
+        }
+
+        :deep(code) {
+            background-color: rgba(0, 0, 0, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            display: inline-block;
+        }
+
+        .ww-message-item--own :deep(code) {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        :deep(s) {
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+
+        :deep(a) {
+            color: inherit;
+            text-decoration: underline;
+            opacity: 0.8;
+
+            &:hover {
+                opacity: 1;
+            }
         }
     }
 
