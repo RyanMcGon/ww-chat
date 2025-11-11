@@ -48,6 +48,7 @@
                     :delete-icon-color="deleteIconColor"
                     :delete-icon-size="deleteIconSize"
                     :allow-rich-text="allowRichText"
+                    :is-pending="pendingIdsSet.has(message.id)"
                     @attachment-click="handleAttachmentClick"
                     @right-click="handleRightClick"
                     @edit="handleEdit"
@@ -205,6 +206,10 @@ export default {
             type: Boolean,
             default: true,
         },
+        pendingMessageIds: {
+            type: Array,
+            default: () => [],
+        },
     },
     emits: ['attachment-click', 'message-right-click', 'message-edit', 'message-delete'],
     setup(props, { emit }) {
@@ -257,6 +262,8 @@ export default {
 
             return result;
         });
+
+        const pendingIdsSet = computed(() => new Set((props.pendingMessageIds || []).filter(Boolean)));
 
         const isSameSenderAsPrevious = index => {
             if (index === 0) return false;
@@ -314,11 +321,13 @@ export default {
 
         const handleEdit = (message) => {
             if (isEditing.value) return;
+            if (pendingIdsSet.value.has(message?.id)) return;
             emit('message-edit', message);
         };
 
         const handleDelete = (message) => {
             if (isEditing.value) return;
+            if (pendingIdsSet.value.has(message?.id)) return;
             emit('message-delete', message);
         };
 
@@ -333,6 +342,7 @@ export default {
             emptyMessageStyle,
             dateSeparatorStyle,
             dateTimeOptions,
+            pendingIdsSet,
         };
     },
 };

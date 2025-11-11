@@ -13,12 +13,12 @@
             :class="{ 'ww-message-item__content--own': isOwnMessage }"
             :style="messageStyles"
             @contextmenu.prevent="handleRightClick"
-            @mouseenter="showMenu = isOwnMessage"
+            @mouseenter="showMenu = isOwnMessage && !isPending"
             @mouseleave="showMenu = false"
         >
             <!-- Menu button for own messages -->
             <div
-                v-if="isOwnMessage"
+                v-if="isOwnMessage && !isPending"
                 class="ww-message-item__menu"
                 :class="{ 'ww-message-item__menu--visible': showMenu }"
             >
@@ -155,6 +155,10 @@ export default {
             default: false,
         },
         sameSenderAsNext: {
+            type: Boolean,
+            default: false,
+        },
+        isPending: {
             type: Boolean,
             default: false,
         },
@@ -458,18 +462,19 @@ export default {
         };
 
         const toggleMenu = () => {
+            if (props.isPending) return;
             showMenuDropdown.value = !showMenuDropdown.value;
         };
 
         const handleEdit = () => {
-            if (isEditing.value) return;
+            if (isEditing.value || props.isPending) return;
             showMenuDropdown.value = false;
             showMenu.value = false;
             emit('edit', props.message);
         };
 
         const handleDelete = () => {
-            if (isEditing.value) return;
+            if (isEditing.value || props.isPending) return;
             showMenuDropdown.value = false;
             showMenu.value = false;
             emit('delete', props.message);

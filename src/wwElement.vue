@@ -60,6 +60,7 @@
                 :delete-icon-color="deleteIconColor"
                 :delete-icon-size="deleteIconSize"
                 :allow-rich-text="allowRichText"
+                :pending-message-ids="pendingLocalMessageIdsArray"
                 @attachment-click="handleAttachmentClick"
                 @message-right-click="handleMessageRightClick"
                 @message-edit="handleMessageEdit"
@@ -217,6 +218,22 @@ export default {
         const isScrolling = ref(false);
         const pendingAttachments = ref([]);
         const editingMessage = ref(null);
+        const pendingLocalMessageIds = ref({});
+
+        const addPendingMessageId = id => {
+            if (!id) return;
+            pendingLocalMessageIds.value = {
+                ...pendingLocalMessageIds.value,
+                [id]: true,
+            };
+        };
+
+        const removePendingMessageId = id => {
+            if (!id) return;
+            if (!pendingLocalMessageIds.value[id]) return;
+            const { [id]: _, ...rest } = pendingLocalMessageIds.value;
+            pendingLocalMessageIds.value = rest;
+        };
 
         const debounce = (func, delay) => {
             let timeoutId;
@@ -485,6 +502,29 @@ export default {
             { deep: true }
         );
 
+        const pendingLocalMessageIdsArray = computed(() => Object.keys(pendingLocalMessageIds.value));
+
+        watch(
+            messages,
+            newMessages => {
+                const currentIds = new Set(newMessages.map(message => message?.id).filter(Boolean));
+                const updated = { ...pendingLocalMessageIds.value };
+                let changed = false;
+
+                Object.keys(updated).forEach(id => {
+                    if (!currentIds.has(id)) {
+                        delete updated[id];
+                        changed = true;
+                    }
+                });
+
+                if (changed) {
+                    pendingLocalMessageIds.value = updated;
+                }
+            },
+            { deep: true }
+        );
+
         // Sync newMessage with exposed inputValue variable
         // Use a flag to prevent circular updates
         const isUpdatingFromExternal = ref(false);
@@ -614,6 +654,8 @@ export default {
             pendingAttachments.value = [];
 
             const messageId = wwLib.wwUtils.getUid();
+            addPendingMessageId(messageId);
+            setTimeout(() => removePendingMessageId(messageId), 30000);
 
             const baseMessage = {
                 id: messageId,
@@ -720,6 +762,10 @@ export default {
 
         const handleMessageEdit = (message) => {
             if (isEditing.value) return;
+            if (pendingLocalMessageIds.value?.[message?.id]) {
+                console.warn('ww-chat: Message is still pending persistence and cannot be edited yet.');
+                return;
+            }
             
             // Get the original raw message data to preserve the ID
             // This is critical - _originalData contains the source message from the messages array
@@ -1231,6 +1277,7 @@ export default {
             displayHeader,
             allowAttachments,
             inputPlaceholder,
+            pendingLocalMessageIdsArray,
             
 
             headerUserName,
