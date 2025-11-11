@@ -861,10 +861,6 @@ export default {
             inputValue.value = markdown;
             plainTextValue.value = plainText;
             processMentionState(plainText, caret);
-            nextTick(() => {
-                syncRichEditor(true);
-                setCaretOffsetInRich(caret);
-            });
         };
 
         const handleRichKeyDown = (event) => {
