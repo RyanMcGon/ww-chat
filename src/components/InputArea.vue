@@ -119,12 +119,23 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
+                        @click="applyFormat('bullet')"
+                        title="Bullet list"
+                    >
+                        •
+                    </button>
+                    <button
+                        type="button"
+                        class="ww-chat-input-area__toolbar-btn"
+                        :disabled="isUiDisabled"
+                        @mousedown.prevent
                         @click="applyFormat('link')"
                         title="Insert link"
                     >
                         🔗
                     </button>
                 </div>
+
                 <textarea
                     ref="textareaRef"
                     v-model="inputValue"
@@ -132,13 +143,20 @@
                     :placeholder="placeholder"
                     :disabled="isUiDisabled"
                     :style="inputStyles"
-                    @keydown.enter.prevent="onEnterPress"
-                    @input="handleInput"
+                    @keydown.enter="onEnterKey"
+                    @input="handleRawInput"
                     @keydown="handleKeyDown"
                     @keyup="updateSelection"
                     @click="updateSelection"
                     @select="updateSelection"
                 ></textarea>
+
+                <div
+                    v-if="allowRichText"
+                    class="ww-chat-input-area__preview"
+                    :class="{ 'ww-chat-input-area__preview--empty': !inputValue.trim() }"
+                    v-html="richPreviewHtml"
+                ></div>
 
                 <!-- Mentions dropdown -->
                 <div
@@ -205,6 +223,7 @@
 
 <script>
 import { ref, computed, watch, nextTick, inject, watchEffect } from 'vue';
+import { formatRichText } from '../utils/richTextFormatter';
 
 export default {
     name: 'InputArea',
@@ -479,6 +498,16 @@ export default {
 
         const canSend = computed(() => inputValue.value.trim().length > 0 || props.pendingAttachments.length > 0);
         const isUiDisabled = computed(() => props.isDisabled || isEditing.value);
+        const richPreviewHtml = computed(() => {
+            if (!props.allowRichText) return '';
+            return formatRichText(
+                inputValue.value,
+                mentions.value,
+                true,
+                props.mentionsColor,
+                props.mentionsBgColor
+            );
+        });
 
         const alignItemsCss = computed(() => {
             if (props.actionAlign === 'start') return 'flex-start';
@@ -508,52 +537,31 @@ export default {
             '--btn-hover-bg': props.attachmentButtonHoverBgColor,
         }));
 
-        watch(
-            () => props.modelValue,
-            newValue => {
-                inputValue.value = newValue;
-            }
-        );
-
-        watch(
-            () => props.editingMessage,
-            (newMessage) => {
-                if (newMessage) {
-                    inputValue.value = newMessage.text || '';
-                    nextTick(() => {
-                        if (textareaRef.value) {
-                            textareaRef.value.focus();
-                            const length = inputValue.value.length;
-                            textareaRef.value.setSelectionRange(length, length);
-                            updateSelection();
-                        }
-                    });
-                }
-            },
-            { immediate: true }
-        );
-
-        watch(inputValue, newValue => {
-            emit('update:modelValue', newValue);
-        });
-
         const resizeTextarea = () => {
             // No longer needed since we use fixed height
             // The textarea will maintain its fixed height
         };
 
-        const onEnterPress = event => {
+        const onEnterKey = event => {
             if (isEditing.value) return;
 
-            // If mentions dropdown is open, don't send message
-            if (showMentionsDropdown.value) {
+            updateSelection();
+
+            if (showMentionsDropdown.value && !event.shiftKey) {
+                event.preventDefault();
                 return;
             }
 
-            if (!event.shiftKey && canSend.value && !props.isDisabled) {
-                sendMessage();
+            if (event.shiftKey) {
+                return; // allow newline
             }
-            // Note: Shift+Enter still works for new lines, just without resizing
+
+            if (!props.isDisabled) {
+                event.preventDefault();
+                if (canSend.value) {
+                    sendMessage();
+                }
+            }
         };
 
         const sendMessage = () => {
@@ -597,40 +605,6 @@ export default {
                 .join('')
                 .toUpperCase()
                 .slice(0, 2);
-        };
-
-        const handleInput = (event) => {
-            const textarea = textareaRef.value;
-            if (!textarea) return;
-
-            const cursorPos = textarea.selectionStart;
-            const text = inputValue.value || '';
-
-            // Check if we're typing after an @ symbol
-            const textBeforeCursor = text.substring(0, cursorPos);
-            const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-            if (lastAtIndex !== -1) {
-                // Check if there's any whitespace between @ and cursor
-                const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-                if (!/\s/.test(textAfterAt)) {
-                    // We're in mention mode
-                    mentionStartPos.value = lastAtIndex;
-                    mentionSearchText.value = textAfterAt;
-                    showMentionsDropdown.value = true;
-                    selectedMentionIndex.value = 0;
-                    return;
-                }
-            }
-
-            // Not in mention mode
-            showMentionsDropdown.value = false;
-            mentionSearchText.value = '';
-            mentionStartPos.value = -1;
-
-            // Check if any mentions were removed from the text
-            checkRemovedMentions();
-            updateSelection();
         };
 
         const checkRemovedMentions = () => {
@@ -691,6 +665,34 @@ export default {
             }
             if (format === 'strike') {
                 insertFormatting('~~', '~~', 'strikethrough');
+                return;
+            }
+            if (format === 'bullet') {
+                const text = inputValue.value || '';
+                let { start, end } = selectionRange.value;
+                if (start > end) {
+                    const temp = start;
+                    start = end;
+                    end = temp;
+                }
+                const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+                if (text.slice(lineStart, lineStart + 2) === '- ') {
+                    focusTextarea();
+                    return;
+                }
+                const newText = `${text.slice(0, lineStart)}- ${text.slice(lineStart)}`;
+                const offset = 2;
+                inputValue.value = newText;
+                const newStart = start + offset;
+                const newEnd = end + offset;
+                nextTick(() => {
+                    if (!textareaRef.value) return;
+                    focusTextarea();
+                    textareaRef.value.setSelectionRange(newStart, newEnd);
+                    updateSelection();
+                    checkRemovedMentions();
+                    processMentionState(inputValue.value, newEnd);
+                });
                 return;
             }
             if (format === 'link') {
@@ -828,6 +830,79 @@ export default {
             return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${sizes[i]}`;
         };
 
+        const handleRawInput = (event) => {
+            const textarea = textareaRef.value;
+            if (!textarea) return;
+
+            const text = event.target.value ?? '';
+            inputValue.value = text;
+            const cursorPos = textarea.selectionStart ?? text.length;
+            processMentionState(text, cursorPos);
+            updateSelection();
+        };
+
+        const processMentionState = (text, cursorPos) => {
+            const textBeforeCursor = text.substring(0, cursorPos);
+            const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+            if (lastAtIndex !== -1) {
+                const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+                if (!/\s/.test(textAfterAt)) {
+                    mentionStartPos.value = lastAtIndex;
+                    mentionSearchText.value = textAfterAt;
+                    showMentionsDropdown.value = true;
+                    selectedMentionIndex.value = 0;
+                    checkRemovedMentions();
+                    return;
+                }
+            }
+
+            showMentionsDropdown.value = false;
+            mentionSearchText.value = '';
+            mentionStartPos.value = -1;
+            checkRemovedMentions();
+        };
+
+        watch(
+            () => props.modelValue,
+            newValue => {
+                inputValue.value = newValue || '';
+                nextTick(() => {
+                    const textarea = textareaRef.value;
+                    const length = inputValue.value.length;
+                    if (textarea) {
+                        textarea.setSelectionRange(length, length);
+                        updateSelection();
+                    }
+                    processMentionState(inputValue.value, length);
+                });
+            }
+        );
+
+        watch(
+            () => props.editingMessage,
+            (newMessage) => {
+                if (newMessage) {
+                    inputValue.value = newMessage.text || '';
+                    nextTick(() => {
+                        const textarea = textareaRef.value;
+                        const length = inputValue.value.length;
+                        if (textarea) {
+                            textarea.focus();
+                            textarea.setSelectionRange(length, length);
+                            updateSelection();
+                        }
+                        processMentionState(inputValue.value, length);
+                    });
+                }
+            },
+            { immediate: true }
+        );
+
+        watch(inputValue, newValue => {
+            emit('update:modelValue', newValue);
+        });
+
             return {
                 textareaRef,
                 inputValue,
@@ -856,10 +931,12 @@ export default {
                 color: props.inputTextColor,
                 opacity: props.isDisabled ? 0.5 : 1,
             })),
+            richPreviewHtml,
+            allowRichText: computed(() => props.allowRichText),
             isImageFile,
             formatFileSize,
 
-            onEnterPress,
+            onEnterKey,
             sendMessage,
             handleAttachment,
             removeAttachment,
@@ -871,13 +948,12 @@ export default {
             selectedMentionIndex,
             mentionsDropdownStyle,
             getInitials,
-            handleInput,
+            handleRawInput,
             handleKeyDown,
             selectMention,
             handleCancelEdit,
             applyFormat,
             updateSelection,
-            allowRichText: computed(() => props.allowRichText),
         };
     },
 };
@@ -1119,6 +1195,69 @@ export default {
         font-weight: 600;
     }
 
+    &__rich-input {
+        width: 100%;
+        height: v-bind('inputHeight');
+        padding: calc((v-bind('inputHeight') - 1.5em) / 2) 16px;
+        border-radius: v-bind('inputBorderRadius');
+        font-size: v-bind('inputFontSize');
+        font-weight: v-bind('inputFontWeight');
+        font-family: v-bind('inputFontFamily');
+        line-height: 1.5;
+        overflow-y: auto;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        background-color: v-bind('inputBgColor');
+        color: v-bind('inputTextColor');
+        border: var(--textarea-border);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        vertical-align: bottom;
+        align-self: flex-end;
+        margin: 0;
+        min-height: 38px; /* Ensure minimum height for rich text */
+        outline: none;
+        white-space: pre-wrap; /* Preserve whitespace and line breaks */
+        word-break: break-word;
+
+        &::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+        }
+
+        &::placeholder {
+            color: v-bind('inputPlaceholderColor');
+            font-weight: 400;
+        }
+
+        &:hover {
+            border: var(--textarea-border-hover);
+        }
+
+        &:focus {
+            outline: none;
+            border: var(--textarea-border-focus);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
+        }
+
+        &:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: #f8fafc;
+        }
+
+        &--disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+            background-color: #f8fafc;
+            color: #94a3b8;
+            border-color: #e2e8f0;
+            box-shadow: none;
+        }
+    }
+
     &__input {
         width: 100%;
         resize: none;
@@ -1327,6 +1466,49 @@ export default {
         text-align: center;
         color: #94a3b8;
         font-size: 14px;
+        font-style: italic;
+    }
+
+    &__preview {
+        margin-top: 6px;
+        padding: 10px 14px;
+        border-radius: v-bind('inputBorderRadius');
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(148, 163, 184, 0.08);
+        font-size: v-bind('inputFontSize');
+        font-family: v-bind('inputFontFamily');
+        color: v-bind('inputTextColor');
+        max-height: 160px;
+        overflow-y: auto;
+
+        :deep(strong) {
+            font-weight: 600;
+        }
+
+        :deep(em) {
+            font-style: italic;
+        }
+
+        :deep(code) {
+            background-color: rgba(0, 0, 0, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85em;
+        }
+
+        :deep(s) {
+            text-decoration: line-through;
+        }
+
+        :deep(a) {
+            color: inherit;
+            text-decoration: underline;
+        }
+    }
+
+    &__preview--empty {
+        color: #94a3b8;
         font-style: italic;
     }
 }

@@ -75,6 +75,31 @@ const processRichText = (text, allowRichText = true) => {
         result = result.replace(`__STRIKE_${index}__`, content);
     });
 
+    // Convert simple markdown bullet lists (- item) into HTML lists
+    const lines = result.split('\n');
+    const segments = [];
+    let listBuffer = [];
+
+    const flushList = () => {
+        if (listBuffer.length === 0) return;
+        segments.push(`<ul>${listBuffer.join('')}</ul>`);
+        listBuffer = [];
+    };
+
+    lines.forEach(line => {
+        const match = line.match(/^\s*-\s+(.*)/);
+        if (match) {
+            listBuffer.push(`<li>${match[1]}</li>`);
+        } else {
+            flushList();
+            segments.push(line);
+        }
+    });
+
+    flushList();
+
+    result = segments.join('\n');
+
     return result;
 };
 
