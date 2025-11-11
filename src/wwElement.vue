@@ -722,11 +722,14 @@ export default {
             // This is critical - _originalData contains the source message from the messages array
             const originalData = message._originalData || message;
             
-            // Resolve the ID from the original data using the mapping formula
-            // This is the source of truth - we resolve from the raw data, not the processed message
-            let messageId = resolveMapping(originalData, props.content?.mappingMessageId, 'id');
+            // Resolve the ID, prioritizing the processed message id (already mapped for the UI)
+            let messageId = message.id;
+            if (!messageId) {
+                // Fall back to mapping from original data
+                messageId = resolveMapping(originalData, props.content?.mappingMessageId, 'id');
+            }
             
-            // If mapping formula resolution failed (returned empty/falsy), try fallbacks
+            // If mapping formula resolution failed (returned empty/falsy), try additional fallbacks
             if (!messageId) {
                 // First fallback: try direct property access on originalData
                 // Check common ID property names
@@ -734,9 +737,8 @@ export default {
             }
             
             // Second fallback: use the processed message's ID if we still don't have one
-            // The processed message ID was resolved when the message was first processed,
-            // so it should be valid even if our resolution above failed
-            if (!messageId) {
+            // (This handles cases where mapping produced a falsy value but message.id existed)
+            if (!messageId && message.id) {
                 messageId = message.id;
             }
             
