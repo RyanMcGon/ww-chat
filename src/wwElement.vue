@@ -536,77 +536,69 @@ export default {
         const currentMentions = ref([]);
 
         const sendMessage = (mentions = []) => {
-            if (isEditing.value || isDisabled.value || (!newMessage.value.trim() && pendingAttachments.value.length === 0)) return;
+            const trimmedMessageText = newMessage.value.trim();
+            const hasPendingAttachments = pendingAttachments.value.length > 0;
 
-            // If editing a message, emit edit event instead
-            // Check editingMessage state to determine if we're editing or sending new
-            const isEditingMessage = editingMessage.value !== null && editingMessage.value !== undefined;
-            
-            if (isEditingMessage) {
-                // Use the snapshot which has the preserved ID
-                // The ID was resolved from _originalData at edit start, so it's always correct
+            if (isEditing.value || isDisabled.value || (!trimmedMessageText && !hasPendingAttachments)) return;
+
+            // Handle edit mode first
+            if (editingMessage.value) {
                 const messageToEdit = editingMessage.value;
-                
-                // Defensive check: ensure we have a valid editing message
+
                 if (!messageToEdit || !messageToEdit.id) {
                     console.warn('ww-chat: Editing message state is invalid, clearing and sending as new message');
                     editingMessage.value = null;
                     setEditingMessageState(null);
-                    // Fall through to send as new message
                 } else {
                     const updatedMessage = {
-                        id: messageToEdit.id, // Use the preserved ID from snapshot
-                        text: newMessage.value.trim(),
+                        id: messageToEdit.id,
+                        text: trimmedMessageText,
                         senderId: messageToEdit.senderId,
                         userName: messageToEdit.userName,
                         timestamp: new Date().toISOString(),
                         attachments: messageToEdit.attachments,
                         mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
                         userSettings: messageToEdit.userSettings,
-                        // Include _originalData so workflows can access the original message structure
                         _originalData: messageToEdit._originalData,
                     };
 
-                    // Clear editing state BEFORE emitting event to prevent race conditions
+                    // Clear edit state before emitting to avoid race conditions, but keep input value until after emit
                     editingMessage.value = null;
                     setEditingMessageState(null);
-                    newMessage.value = '';
-                    currentMentions.value = [];
 
                     emit('trigger-event', {
                         name: 'messageEdit',
                         event: { message: updatedMessage },
                     });
+
+                    newMessage.value = '';
+                    currentMentions.value = [];
                     return;
                 }
             }
-            
-            // Ensure editing state is cleared when sending new messages
-            // This is a safety check in case editing state wasn't cleared properly
+
+            // Ensure edit state is reset before sending a fresh message
             if (editingMessage.value) {
                 editingMessage.value = null;
                 setEditingMessageState(null);
             }
 
             const attachments = [...pendingAttachments.value];
-            // For the emitted event, only expose File objects (no id/url metadata)
             const attachmentsForEvent = attachments
                 .map(att => att && att.file)
                 .filter(file => !!file);
-            // Clear local pending attachments right after snapshotting
+
+            // Clear pending attachments for the UI after we capture the payload
             pendingAttachments.value = [];
 
-            // Generate a unique ID for the new message
-            // Use UUID format without prefix to match backend expectations
             const messageId = wwLib.wwUtils.getUid();
-            
-            const message = {
+
+            const messagePayload = {
                 id: messageId,
-                text: newMessage.value.trim(),
+                text: trimmedMessageText,
                 senderId: currentUserId.value,
                 userName: currentUserParticipant.value?.name || 'You',
                 timestamp: new Date().toISOString(),
-                // Emit attachments as File[] only, without id/url/name duplication
                 attachments: attachmentsForEvent.length > 0 ? attachmentsForEvent : undefined,
                 mentions: mentions.length > 0 ? mentions : undefined,
                 userSettings: currentUserParticipant.value
@@ -619,13 +611,13 @@ export default {
                     : {},
             };
 
-            newMessage.value = '';
-            currentMentions.value = [];
-
             emit('trigger-event', {
                 name: 'messageSent',
-                event: { message },
+                event: { message: messagePayload },
             });
+
+            newMessage.value = '';
+            currentMentions.value = [];
         };
 
         const handleAttachment = files => {
