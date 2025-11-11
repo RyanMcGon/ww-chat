@@ -50,8 +50,8 @@ const processRichText = (text, allowRichText = true) => {
 
     // Process bold: **text** or __text__ (must have at least one character, not newlines)
     // Process bold before italic to avoid conflicts
-    result = result.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
-    result = result.replace(/__([^_\n]+?)__/g, '<strong>$1</strong>');
+    result = result.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+    result = result.replace(/__([\s\S]+?)__/g, '<strong>$1</strong>');
 
     // Process italic: *text* or _text_ (single markers)
     // Since bold (**text** and __text__) is already processed and replaced,
