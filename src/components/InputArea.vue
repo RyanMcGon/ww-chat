@@ -165,6 +165,13 @@
                     @select="updateSelection"
                 ></textarea>
 
+                <div
+                    v-if="allowRichText"
+                    class="ww-chat-input-area__preview"
+                    :class="{ 'ww-chat-input-area__preview--empty': !inputValue.trim() }"
+                    v-html="richPreviewHtml"
+                ></div>
+
                 <!-- Mentions dropdown -->
                 <div
                     v-if="showMentionsDropdown"
@@ -862,6 +869,7 @@ export default {
             plainTextValue.value = plainText;
             processMentionState(plainText, caret);
             nextTick(() => {
+                syncRichEditor(true);
                 setCaretOffsetInRich(caret);
             });
         };
@@ -1291,6 +1299,17 @@ export default {
             return { container: richInputRef.value, offset: richInputRef.value.childNodes?.length || 0 };
         };
 
+        const richPreviewHtml = computed(() => {
+            if (!props.allowRichText) return '';
+            return formatRichText(
+                inputValue.value,
+                mentions.value,
+                false, // isRichText
+                props.mentionsColor,
+                props.mentionsBgColor
+            );
+        });
+
         return {
             textareaRef,
             richInputRef,
@@ -1345,6 +1364,7 @@ export default {
             updateRichSelection,
             handleRichInput,
             handleRichKeyDown,
+            richPreviewHtml,
         };
     },
 };
