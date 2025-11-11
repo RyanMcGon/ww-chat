@@ -766,10 +766,19 @@ export default {
         };
 
         const availableParticipants = computed(() => {
-            const mentionedIds = mentions.value.map(m => m.id);
-            return (props.participants || []).filter(p => 
-                p?.id !== props.currentUserId && !mentionedIds.includes(p.id)
+            const mentionedIds = new Set(mentions.value.map(m => m.id).filter(Boolean));
+            const mentionedNames = new Set(
+                mentions.value.map(m => m.name?.toLowerCase?.()).filter(Boolean)
             );
+
+            return (props.participants || []).filter(p => {
+                if (!p) return false;
+                const participantId = p.id;
+                if (participantId && mentionedIds.has(participantId)) return false;
+                const participantName = (p.name || '').toLowerCase();
+                if (participantName && mentionedNames.has(participantName)) return false;
+                return participantId !== props.currentUserId;
+            });
         });
 
         const filteredParticipants = computed(() => {
@@ -1161,15 +1170,18 @@ export default {
         };
 
         const addMention = (participant, mentionArray) => {
-            const existingMention = mentionArray.find(m => m.id === participant.id);
-            if (!existingMention) {
-                mentionArray.push({
+            const exists = mentionArray.some(m => m.id === participant.id);
+            if (exists) {
+                return mentionArray;
+            }
+            return [
+                ...mentionArray,
+                {
                     id: participant.id,
                     name: participant.name,
                     avatar: participant.avatar || '',
-                });
-            }
-            return mentionArray;
+                },
+            ];
         };
 
         const handleAttachment = event => {
