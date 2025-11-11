@@ -41,6 +41,12 @@
                     :menu-icon="menuIcon"
                     :menu-icon-color="menuIconColor"
                     :menu-icon-size="menuIconSize"
+                    :edit-icon="editIcon"
+                    :edit-icon-color="editIconColor"
+                    :edit-icon-size="editIconSize"
+                    :delete-icon="deleteIcon"
+                    :delete-icon-color="deleteIconColor"
+                    :delete-icon-size="deleteIconSize"
                     @attachment-click="handleAttachmentClick"
                     @right-click="handleRightClick"
                     @edit="handleEdit"
@@ -169,6 +175,30 @@ export default {
         menuIconSize: {
             type: String,
             default: '16px',
+        },
+        editIcon: {
+            type: String,
+            default: 'edit',
+        },
+        editIconColor: {
+            type: String,
+            default: '#334155',
+        },
+        editIconSize: {
+            type: String,
+            default: '14px',
+        },
+        deleteIcon: {
+            type: String,
+            default: 'trash',
+        },
+        deleteIconColor: {
+            type: String,
+            default: '#ef4444',
+        },
+        deleteIconSize: {
+            type: String,
+            default: '14px',
         },
     },
     emits: ['attachment-click', 'message-right-click', 'message-edit', 'message-delete'],

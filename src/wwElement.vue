@@ -53,6 +53,12 @@
                 :menu-icon="menuIcon"
                 :menu-icon-color="menuIconColor"
                 :menu-icon-size="menuIconSize"
+                :edit-icon="editIcon"
+                :edit-icon-color="editIconColor"
+                :edit-icon-size="editIconSize"
+                :delete-icon="deleteIcon"
+                :delete-icon-color="deleteIconColor"
+                :delete-icon-size="deleteIconSize"
                 @attachment-click="handleAttachmentClick"
                 @message-right-click="handleMessageRightClick"
                 @message-edit="handleMessageEdit"
@@ -235,6 +241,22 @@ export default {
                 currentUser: { id: '', name: '', avatar: '', location: '', status: 'online' },
                 utils: { messageCount: 0, isDisabled: false, allowAttachments: false, displayHeader: true },
             },
+        });
+
+        // Expose chat input value as internal variable
+        const { value: inputValue, setValue: setInputValue } = wwLib.wwVariable.useComponentVariable({
+            uid: props.uid,
+            name: 'inputValue',
+            type: 'string',
+            defaultValue: '',
+        });
+
+        // Expose editing message state as internal variable
+        const { value: editingMessageState, setValue: setEditingMessageState } = wwLib.wwVariable.useComponentVariable({
+            uid: props.uid,
+            name: 'editingMessage',
+            type: 'object',
+            defaultValue: null,
         });
 
         const { resolveMappingFormula } = wwLib.wwFormula.useFormula();
@@ -462,6 +484,38 @@ export default {
             { deep: true }
         );
 
+        // Sync newMessage with exposed inputValue variable
+        // Use a flag to prevent circular updates
+        const isUpdatingFromExternal = ref(false);
+        
+        watch(
+            newMessage,
+            (value) => {
+                if (!isUpdatingFromExternal.value) {
+                    const stringValue = value || '';
+                    if (inputValue.value !== stringValue) {
+                        setInputValue(stringValue);
+                    }
+                }
+            },
+            { immediate: true }
+        );
+
+        // Watch for external changes to inputValue (from workflows)
+        watch(
+            inputValue,
+            (value) => {
+                const stringValue = value || '';
+                if (stringValue !== newMessage.value) {
+                    isUpdatingFromExternal.value = true;
+                    newMessage.value = stringValue;
+                    nextTick(() => {
+                        isUpdatingFromExternal.value = false;
+                    });
+                }
+            }
+        );
+
         // Removed user settings watcher and debounced updater; participants now drive user info
 
         const scrollToBottom = async (smooth = null) => {
@@ -492,6 +546,7 @@ export default {
                 };
 
                 editingMessage.value = null;
+                setEditingMessageState(null);
                 newMessage.value = '';
                 currentMentions.value = [];
 
@@ -603,6 +658,7 @@ export default {
             if (isEditing.value) return;
             
             editingMessage.value = message;
+            setEditingMessageState(message);
             newMessage.value = message.text || '';
             
             // Scroll to input area
@@ -626,6 +682,7 @@ export default {
 
         const handleCancelEdit = () => {
             editingMessage.value = null;
+            setEditingMessageState(null);
             newMessage.value = '';
         };
 
@@ -1099,6 +1156,12 @@ export default {
             menuIcon: computed(() => props.content?.menuIcon || 'more-vertical'),
             menuIconColor: computed(() => props.content?.menuIconColor || '#64748b'),
             menuIconSize: computed(() => props.content?.menuIconSize || '16px'),
+            editIcon: computed(() => props.content?.editIcon || 'edit'),
+            editIconColor: computed(() => props.content?.editIconColor || '#334155'),
+            editIconSize: computed(() => props.content?.editIconSize || '14px'),
+            deleteIcon: computed(() => props.content?.deleteIcon || 'trash'),
+            deleteIconColor: computed(() => props.content?.deleteIconColor || '#ef4444'),
+            deleteIconSize: computed(() => props.content?.deleteIconSize || '14px'),
 
             // Mentions
             mentionsColor: computed(() => props.content?.mentionsColor || '#3b82f6'),

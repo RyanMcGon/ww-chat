@@ -42,14 +42,22 @@
                         class="ww-message-item__menu-item"
                         @click="handleEdit"
                     >
-                        <span class="ww-message-item__menu-item-icon">✏️</span>
+                        <span
+                            class="ww-message-item__menu-item-icon"
+                            :style="{ width: editIconSize, height: editIconSize, color: editIconColor }"
+                            v-html="editIconHtml"
+                        ></span>
                         <span>Edit</span>
                     </button>
                     <button
                         class="ww-message-item__menu-item ww-message-item__menu-item--delete"
                         @click="handleDelete"
                     >
-                        <span class="ww-message-item__menu-item-icon">🗑️</span>
+                        <span
+                            class="ww-message-item__menu-item-icon"
+                            :style="{ width: deleteIconSize, height: deleteIconSize, color: deleteIconColor }"
+                            v-html="deleteIconHtml"
+                        ></span>
                         <span>Delete</span>
                     </button>
                 </div>
@@ -225,6 +233,30 @@ export default {
             type: String,
             default: '16px',
         },
+        editIcon: {
+            type: String,
+            default: 'edit',
+        },
+        editIconColor: {
+            type: String,
+            default: '#334155',
+        },
+        editIconSize: {
+            type: String,
+            default: '14px',
+        },
+        deleteIcon: {
+            type: String,
+            default: 'trash',
+        },
+        deleteIconColor: {
+            type: String,
+            default: '#ef4444',
+        },
+        deleteIconSize: {
+            type: String,
+            default: '14px',
+        },
     },
     emits: ['attachment-click', 'right-click', 'edit', 'delete'],
     setup(props, { emit }) {
@@ -236,6 +268,8 @@ export default {
         const showMenu = ref(false);
         const showMenuDropdown = ref(false);
         const menuIconText = ref(null);
+        const editIconText = ref(null);
+        const deleteIconText = ref(null);
 
         const dateTimeOptions = inject(
             'dateTimeOptions',
@@ -260,6 +294,36 @@ export default {
             <circle cx="12" cy="19" r="1"></circle>
         </svg>`;
 
+        const defaultEditIcon = `<svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>`;
+
+        const defaultDeleteIcon = `<svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>`;
+
         watchEffect(async () => {
             try {
                 if (props.menuIcon) {
@@ -270,8 +334,36 @@ export default {
             }
         });
 
+        watchEffect(async () => {
+            try {
+                if (props.editIcon) {
+                    editIconText.value = await getIcon(props.editIcon);
+                }
+            } catch (error) {
+                editIconText.value = null;
+            }
+        });
+
+        watchEffect(async () => {
+            try {
+                if (props.deleteIcon) {
+                    deleteIconText.value = await getIcon(props.deleteIcon);
+                }
+            } catch (error) {
+                deleteIconText.value = null;
+            }
+        });
+
         const menuIconHtml = computed(() => {
             return menuIconText.value || defaultMenuIcon;
+        });
+
+        const editIconHtml = computed(() => {
+            return editIconText.value || defaultEditIcon;
+        });
+
+        const deleteIconHtml = computed(() => {
+            return deleteIconText.value || defaultDeleteIcon;
         });
 
         const messageStyles = computed(() => {
@@ -499,6 +591,8 @@ export default {
             showMenu,
             showMenuDropdown,
             menuIconHtml,
+            editIconHtml,
+            deleteIconHtml,
             toggleMenu,
             handleEdit,
             handleDelete,
@@ -751,8 +845,15 @@ export default {
     }
 
     &__menu-item-icon {
-        font-size: 1rem;
-        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        :deep(svg) {
+            width: 100%;
+            height: 100%;
+        }
     }
 
     &__content {

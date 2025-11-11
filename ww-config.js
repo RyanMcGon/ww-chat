@@ -136,6 +136,12 @@ export default {
                 'menuIcon',
                 'menuIconColor',
                 'menuIconSize',
+                'editIcon',
+                'editIconColor',
+                'editIconSize',
+                'deleteIcon',
+                'deleteIconColor',
+                'deleteIconSize',
                 'mentionsTitle',
                 'mentionsColor',
                 'mentionsBgColor',
@@ -1853,6 +1859,126 @@ export default {
             propertyHelp: {
                 tooltip:
                     'Message menu icon size.\n\nExample: `16px`',
+            },
+            /* wwEditor:end */
+        },
+        editIcon: {
+            label: { en: 'Edit Icon' },
+            type: 'SystemIcon',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: 'edit',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Icon for the edit button in message menu',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Icon used for the edit button in the message menu.\n\nExample: `lucide/edit`, `lucide/pencil`',
+            },
+            /* wwEditor:end */
+        },
+        editIconColor: {
+            label: { en: 'Edit Icon Color' },
+            type: 'Color',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: '#334155',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Color of the edit icon',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Edit icon color.\n\nExample: `#334155`',
+            },
+            /* wwEditor:end */
+        },
+        editIconSize: {
+            label: { en: 'Edit Icon Size' },
+            type: 'Length',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: '14px',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Size of the edit icon',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Edit icon size.\n\nExample: `14px`',
+            },
+            /* wwEditor:end */
+        },
+        deleteIcon: {
+            label: { en: 'Delete Icon' },
+            type: 'SystemIcon',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: 'trash',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Icon for the delete button in message menu',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Icon used for the delete button in the message menu.\n\nExample: `lucide/trash`, `lucide/trash-2`',
+            },
+            /* wwEditor:end */
+        },
+        deleteIconColor: {
+            label: { en: 'Delete Icon Color' },
+            type: 'Color',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: '#ef4444',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Color of the delete icon',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Delete icon color.\n\nExample: `#ef4444`',
+            },
+            /* wwEditor:end */
+        },
+        deleteIconSize: {
+            label: { en: 'Delete Icon Size' },
+            type: 'Length',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: '14px',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Size of the delete icon',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Delete icon size.\n\nExample: `14px`',
             },
             /* wwEditor:end */
         },
