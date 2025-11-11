@@ -498,6 +498,7 @@ export default {
             textarea.style.height = 'auto';
             const targetHeight = Math.min(textarea.scrollHeight, textareaMaxHeight.value);
             textarea.style.height = `${targetHeight}px`;
+            textarea.style.overflowY = textarea.scrollHeight > textareaMaxHeight.value ? 'auto' : 'hidden';
         };
 
         const focusTextarea = () => {
@@ -1606,18 +1607,9 @@ export default {
             min-height: calc(var(--rich-input-min-height, 38px));
         }
 
-        &:hover {
-            border: v-bind('textareaBorderHover');
-        }
-
+        &:hover,
         &:focus {
-            border: v-bind('textareaBorderFocus');
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
-            transform: translateY(-1px);
-        }
-
-        &::selection {
-            background: rgba(59, 130, 246, 0.25);
+            overflow-y: auto;
         }
 
         &:empty::before {
@@ -1703,6 +1695,7 @@ export default {
 
         &:hover {
             border: var(--textarea-border-hover);
+            overflow-y: auto;
         }
 
         &:focus {
@@ -1710,12 +1703,14 @@ export default {
             border: var(--textarea-border-focus);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
             transform: translateY(-1px);
+            overflow-y: auto;
         }
 
         &:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             background-color: #f8fafc;
+            overflow-y: hidden;
         }
     }
 
