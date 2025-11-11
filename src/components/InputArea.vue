@@ -1118,7 +1118,18 @@ export default {
                 const win = getFrontWindow();
                 const selection = win.getSelection();
                 if (!selection || selection.rangeCount === 0) return;
-                const range = selection.getRangeAt(0);
+
+                const mentionLength = (mentionSearchText.value || '').length;
+                const startOffset = Math.max(mentionStartPos.value, 0);
+                const endOffset = startOffset + mentionLength + 1; // include '@'
+
+                const startPoint = getDomPointFromOffset(startOffset);
+                const endPoint = getDomPointFromOffset(endOffset);
+
+                const range = doc.createRange();
+                if (!startPoint.container || !endPoint.container) return;
+                range.setStart(startPoint.container, startPoint.offset);
+                range.setEnd(endPoint.container, endPoint.offset);
 
                 const mentionSpan = doc.createElement('span');
                 mentionSpan.className = 'ww-message-item__mention';
@@ -1220,6 +1231,25 @@ export default {
             const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(1024));
             return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${sizes[i]}`;
+        };
+
+        const getDomPointFromOffset = (offset) => {
+            if (!richInputRef.value) {
+                return { container: null, offset: 0 };
+            }
+            let remaining = Math.max(0, offset);
+            const doc = getFrontDocument();
+            const walker = doc.createTreeWalker(richInputRef.value, NodeFilter.SHOW_TEXT, null);
+            let node = walker.nextNode();
+            while (node) {
+                const length = node.nodeValue?.length ?? 0;
+                if (remaining <= length) {
+                    return { container: node, offset: remaining };
+                }
+                remaining -= length;
+                node = walker.nextNode();
+            }
+            return { container: richInputRef.value, offset: richInputRef.value.childNodes?.length || 0 };
         };
 
         return {
