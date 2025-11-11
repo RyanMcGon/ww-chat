@@ -72,7 +72,7 @@
             </label>
 
             <!-- Input field -->
-            <div class="ww-chat-input-area__input-container">
+            <div class="ww-chat-input-area__input-container" :style="richSizingStyle">
                 <div v-if="allowRichText" class="ww-chat-input-area__toolbar">
                     <button
                         type="button"
@@ -229,7 +229,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, inject, watchEffect } from 'vue';
+import { ref, computed, watch, nextTick, inject, watchEffect, onMounted } from 'vue';
 import { formatRichText } from '../utils/richTextFormatter';
 
 const getFrontWindow = () => {
@@ -404,6 +404,10 @@ export default {
             type: String,
             default: '20px',
         },
+        inputMaxHeight: {
+            type: String,
+            default: '260px',
+        },
         placeholder: {
             type: String,
             default: 'Type a message...',
@@ -476,6 +480,25 @@ export default {
         const removeIconText = ref(null);
         const selectionRange = ref({ start: 0, end: 0 });
         const isSyncingRich = ref(false);
+
+        const richSizingStyle = computed(() => ({
+            '--rich-input-min-height': props.inputHeight || '38px',
+            '--rich-input-max-height': props.inputMaxHeight || '260px',
+        }));
+
+        const textareaMaxHeight = computed(() => {
+            if (!props.inputMaxHeight) return 260;
+            const parsed = parseInt(props.inputMaxHeight, 10);
+            return Number.isFinite(parsed) ? parsed : 260;
+        });
+
+        const adjustTextareaHeight = () => {
+            if (props.allowRichText || !textareaRef.value) return;
+            const textarea = textareaRef.value;
+            textarea.style.height = 'auto';
+            const targetHeight = Math.min(textarea.scrollHeight, textareaMaxHeight.value);
+            textarea.style.height = `${targetHeight}px`;
+        };
 
         const focusTextarea = () => {
             if (props.allowRichText) {
@@ -670,6 +693,7 @@ export default {
                         if (textarea) {
                             textarea.setSelectionRange(length, length);
                             updateSelection();
+                            adjustTextareaHeight();
                         }
                         processMentionState(plainTextValue.value, plainTextValue.value.length);
                     });
@@ -705,6 +729,7 @@ export default {
                                 const length = inputValue.value.length;
                                 textareaRef.value.setSelectionRange(length, length);
                                 updateSelection();
+                                adjustTextareaHeight();
                             }
                             processMentionState(plainTextValue.value, plainTextValue.value.length);
                         });
@@ -716,6 +741,16 @@ export default {
 
         watch(inputValue, newValue => {
             emit('update:modelValue', newValue);
+        });
+
+        onMounted(() => {
+            nextTick(() => {
+                if (props.allowRichText) {
+                    syncRichEditor(false);
+                } else {
+                    adjustTextareaHeight();
+                }
+            });
         });
 
         const onEnterKey = event => {
@@ -762,6 +797,7 @@ export default {
                 richInputRef.value.innerHTML = '';
             } else if (textareaRef.value) {
                 textareaRef.value.value = '';
+                adjustTextareaHeight();
             }
         };
 
@@ -813,6 +849,7 @@ export default {
             const cursorPos = textarea.selectionStart ?? text.length;
             processMentionState(text, cursorPos);
             updateSelection();
+            adjustTextareaHeight();
         };
 
         const handleRichInput = () => {
@@ -1176,6 +1213,7 @@ export default {
                 const newCursorPos = before.length + mentionText.length + 1;
                 textarea.setSelectionRange(newCursorPos, newCursorPos);
                 updateSelection();
+                adjustTextareaHeight();
                 textarea.focus();
             });
         };
@@ -1264,6 +1302,7 @@ export default {
             alignItemsCss,
             sendButtonStyle,
             attachmentButtonStyle,
+            richSizingStyle,
             inputAreaStyles: computed(() => ({
                 borderTop: props.inputAreaBorder,
             })),
@@ -1271,7 +1310,6 @@ export default {
                 backgroundColor: props.inputBgColor,
                 color: props.inputTextColor,
                 '--placeholder-color': props.inputPlaceholderColor,
-                height: props.inputHeight,
                 borderRadius: props.inputBorderRadius,
                 '--textarea-border': props.textareaBorder,
                 '--textarea-border-hover': props.textareaBorderHover,
@@ -1548,21 +1586,25 @@ export default {
     }
 
     &__rich-input {
-        min-height: v-bind('inputHeight');
         border-radius: v-bind('inputBorderRadius');
         font-size: v-bind('inputFontSize');
         font-weight: v-bind('inputFontWeight');
         font-family: v-bind('inputFontFamily');
         line-height: 1.5;
-        padding: calc((v-bind('inputHeight') - 1.5em) / 2) 16px;
+        padding: 8px 16px;
         border: v-bind('textareaBorder');
         background-color: v-bind('inputBgColor');
         color: v-bind('inputTextColor');
-        overflow-y: auto;
+        overflow-y: hidden;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         outline: none;
         white-space: pre-wrap;
+        max-height: calc(var(--rich-input-max-height, 260px));
+
+        &:not(.ww-chat-input-area__rich-input--disabled) {
+            min-height: calc(var(--rich-input-min-height, 38px));
+        }
 
         &:hover {
             border: v-bind('textareaBorderHover');
@@ -1629,15 +1671,13 @@ export default {
     &__input {
         width: 100%;
         resize: none;
-        height: v-bind('inputHeight');
-        /* Center a single text line vertically based on height and line-height */
-        padding: calc((v-bind('inputHeight') - 1.5em) / 2) 16px;
+        padding: 8px 16px;
         border-radius: v-bind('inputBorderRadius');
         font-size: v-bind('inputFontSize');
         font-weight: v-bind('inputFontWeight');
         font-family: v-bind('inputFontFamily');
         line-height: 1.5;
-        overflow-y: auto;
+        overflow-y: hidden;
         scrollbar-width: none; /* Firefox */
         -ms-overflow-style: none; /* IE/Edge */
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1648,6 +1688,8 @@ export default {
         vertical-align: bottom;
         align-self: flex-end;
         margin: 0;
+        min-height: calc(var(--rich-input-min-height, 38px));
+        max-height: calc(var(--rich-input-max-height, 260px));
 
         &::-webkit-scrollbar {
             width: 0;
@@ -1846,7 +1888,7 @@ export default {
         font-size: v-bind('inputFontSize');
         font-family: v-bind('inputFontFamily');
         color: v-bind('inputTextColor');
-        max-height: 160px;
+        max-height: calc(var(--rich-input-max-height, 260px));
         overflow-y: auto;
 
         :deep(strong) {
