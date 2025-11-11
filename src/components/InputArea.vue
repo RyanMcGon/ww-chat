@@ -73,6 +73,58 @@
 
             <!-- Input field -->
             <div class="ww-chat-input-area__input-container">
+                <div v-if="allowRichText" class="ww-chat-input-area__toolbar">
+                    <button
+                        type="button"
+                        class="ww-chat-input-area__toolbar-btn"
+                        :disabled="isUiDisabled"
+                        @mousedown.prevent
+                        @click="applyFormat('bold')"
+                        title="Bold"
+                    >
+                        <strong>B</strong>
+                    </button>
+                    <button
+                        type="button"
+                        class="ww-chat-input-area__toolbar-btn"
+                        :disabled="isUiDisabled"
+                        @mousedown.prevent
+                        @click="applyFormat('italic')"
+                        title="Italic"
+                    >
+                        <em>I</em>
+                    </button>
+                    <button
+                        type="button"
+                        class="ww-chat-input-area__toolbar-btn"
+                        :disabled="isUiDisabled"
+                        @mousedown.prevent
+                        @click="applyFormat('code')"
+                        title="Inline code"
+                    >
+                        <span class="ww-chat-input-area__toolbar-code">{ }</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="ww-chat-input-area__toolbar-btn"
+                        :disabled="isUiDisabled"
+                        @mousedown.prevent
+                        @click="applyFormat('strike')"
+                        title="Strikethrough"
+                    >
+                        <span class="ww-chat-input-area__toolbar-strike">S</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="ww-chat-input-area__toolbar-btn"
+                        :disabled="isUiDisabled"
+                        @mousedown.prevent
+                        @click="applyFormat('link')"
+                        title="Insert link"
+                    >
+                        🔗
+                    </button>
+                </div>
                 <textarea
                     ref="textareaRef"
                     v-model="inputValue"
@@ -83,6 +135,9 @@
                     @keydown.enter.prevent="onEnterPress"
                     @input="handleInput"
                     @keydown="handleKeyDown"
+                    @keyup="updateSelection"
+                    @click="updateSelection"
+                    @select="updateSelection"
                 ></textarea>
 
                 <!-- Mentions dropdown -->
@@ -149,7 +204,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, onMounted, inject, watchEffect } from 'vue';
+import { ref, computed, watch, nextTick, inject, watchEffect } from 'vue';
 
 export default {
     name: 'InputArea',
@@ -289,6 +344,10 @@ export default {
             type: String,
             default: '#dbeafe',
         },
+        allowRichText: {
+            type: Boolean,
+            default: true,
+        },
         editingMessage: {
             type: Object,
             default: null,
@@ -305,6 +364,21 @@ export default {
         const sendIconText = ref(null);
         const attachmentIconText = ref(null);
         const removeIconText = ref(null);
+        const selectionRange = ref({ start: 0, end: 0 });
+
+        const focusTextarea = () => {
+            if (textareaRef.value) {
+                textareaRef.value.focus();
+            }
+        };
+
+        const updateSelection = () => {
+            if (!textareaRef.value) return;
+            selectionRange.value = {
+                start: textareaRef.value.selectionStart ?? 0,
+                end: textareaRef.value.selectionEnd ?? 0,
+            };
+        };
 
         // Mentions state
         const showMentionsDropdown = ref(false);
@@ -449,6 +523,9 @@ export default {
                     nextTick(() => {
                         if (textareaRef.value) {
                             textareaRef.value.focus();
+                            const length = inputValue.value.length;
+                            textareaRef.value.setSelectionRange(length, length);
+                            updateSelection();
                         }
                     });
                 }
@@ -486,6 +563,7 @@ export default {
             inputValue.value = '';
             mentions.value = [];
             showMentionsDropdown.value = false;
+            selectionRange.value = { start: 0, end: 0 };
         };
 
         // Mentions functionality
@@ -552,6 +630,7 @@ export default {
 
             // Check if any mentions were removed from the text
             checkRemovedMentions();
+            updateSelection();
         };
 
         const checkRemovedMentions = () => {
@@ -562,6 +641,91 @@ export default {
                 const mentionText = `@${mention.name}`;
                 return text.includes(mentionText);
             });
+        };
+
+        const insertFormatting = (prefix, suffix, placeholder = '') => {
+            if (isUiDisabled.value) return;
+            if (!textareaRef.value) return;
+
+            const text = inputValue.value || '';
+            let { start, end } = selectionRange.value;
+            if (start > end) {
+                const temp = start;
+                start = end;
+                end = temp;
+            }
+
+            const selectedText = text.slice(start, end) || placeholder;
+            const newText = `${text.slice(0, start)}${prefix}${selectedText}${suffix}${text.slice(end)}`;
+            const newCursorStart = start + prefix.length;
+            const newCursorEnd = newCursorStart + selectedText.length;
+
+            inputValue.value = newText;
+
+            nextTick(() => {
+                if (!textareaRef.value) return;
+                focusTextarea();
+                textareaRef.value.setSelectionRange(newCursorStart, newCursorEnd);
+                updateSelection();
+                checkRemovedMentions();
+            });
+        };
+
+        const applyFormat = (format) => {
+            if (isUiDisabled.value) return;
+            if (!textareaRef.value) return;
+
+            updateSelection();
+
+            if (format === 'bold') {
+                insertFormatting('**', '**', 'bold text');
+                return;
+            }
+            if (format === 'italic') {
+                insertFormatting('*', '*', 'italic text');
+                return;
+            }
+            if (format === 'code') {
+                insertFormatting('`', '`', 'code');
+                return;
+            }
+            if (format === 'strike') {
+                insertFormatting('~~', '~~', 'strikethrough');
+                return;
+            }
+            if (format === 'link') {
+                const frontWindow = wwLib?.getFrontWindow ? wwLib.getFrontWindow() : undefined;
+                const promptFn = frontWindow?.prompt ? frontWindow.prompt.bind(frontWindow) : undefined;
+                const url = promptFn ? promptFn('Enter URL', 'https://') : undefined;
+                if (!url) {
+                    focusTextarea();
+                    return;
+                }
+
+                const text = inputValue.value || '';
+                let { start, end } = selectionRange.value;
+                if (start > end) {
+                    const temp = start;
+                    start = end;
+                    end = temp;
+                }
+                const selectedText = text.slice(start, end) || 'link text';
+                const markdown = `[${selectedText}](${url})`;
+                const newText = `${text.slice(0, start)}${markdown}${text.slice(end)}`;
+                const labelStart = start + 1;
+                const labelEnd = labelStart + selectedText.length;
+
+                inputValue.value = newText;
+
+                nextTick(() => {
+                    if (!textareaRef.value) return;
+                    focusTextarea();
+                    textareaRef.value.setSelectionRange(labelStart, labelEnd);
+                    updateSelection();
+                    checkRemovedMentions();
+                });
+                return;
+            }
         };
 
         const handleKeyDown = (event) => {
@@ -621,6 +785,7 @@ export default {
             nextTick(() => {
                 const newCursorPos = before.length + mentionText.length + 1;
                 textarea.setSelectionRange(newCursorPos, newCursorPos);
+                updateSelection();
                 textarea.focus();
             });
         };
@@ -710,6 +875,9 @@ export default {
             handleKeyDown,
             selectMention,
             handleCancelEdit,
+            applyFormat,
+            updateSelection,
+            allowRichText: computed(() => props.allowRichText),
         };
     },
 };
@@ -898,7 +1066,57 @@ export default {
         flex: 1;
         align-self: flex-end;
         display: flex;
-        align-items: flex-end;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    &__toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        padding: 4px 6px;
+        border-radius: 8px;
+        background: rgba(148, 163, 184, 0.12);
+        align-self: stretch;
+    }
+
+    &__toolbar-btn {
+        border: none;
+        background: transparent;
+        color: #334155;
+        font-size: 0.875rem;
+        padding: 4px 6px;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        transition: background 0.2s ease, transform 0.1s ease;
+
+        &:hover:not(:disabled) {
+            background: rgba(148, 163, 184, 0.2);
+        }
+
+        &:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+
+    &__toolbar-code {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.75rem;
+    }
+
+    &__toolbar-strike {
+        text-decoration: line-through;
+        font-weight: 600;
     }
 
     &__input {

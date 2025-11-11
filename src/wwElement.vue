@@ -114,6 +114,7 @@
             :attachment-button-size="attachmentButtonSize"
             :attachment-button-box-shadow="attachmentButtonBoxShadow"
             :editing-message="editingMessage"
+            :allow-rich-text="allowRichText"
             @send="sendMessage"
             @attachment="handleAttachment"
             @remove-attachment="handleRemoveAttachment"
