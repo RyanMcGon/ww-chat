@@ -1,7 +1,7 @@
 <template>
     <div class="ww-chat-input-area">
         <!-- Pending Attachments Display -->
-        <div v-if="pendingAttachments.length > 0" class="ww-chat-input-area__attachments">
+        <div v-if="pendingAttachments.length > 0 && !editingMessage" class="ww-chat-input-area__attachments">
             <div
                 v-for="(attachment, index) in pendingAttachments"
                 :key="attachment.id"
@@ -52,7 +52,7 @@
         <div class="ww-chat-input-area__input-row" :style="{ alignItems: alignItemsCss }">
             <!-- Attachment button -->
             <label
-                v-if="allowAttachments"
+                v-if="allowAttachments && !editingMessage"
                 class="ww-chat-input-area__attachment-btn"
                 :class="{ 'ww-chat-input-area__attachment-btn--disabled': isUiDisabled }"
                 :style="attachmentButtonStyle"
@@ -117,6 +117,17 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Cancel button (when editing) -->
+            <button
+                v-if="editingMessage"
+                type="button"
+                class="ww-chat-input-area__cancel-btn"
+                :disabled="isUiDisabled"
+                @click="handleCancelEdit"
+            >
+                Cancel
+            </button>
 
             <!-- Send button -->
             <button
@@ -278,8 +289,12 @@ export default {
             type: String,
             default: '#dbeafe',
         },
+        editingMessage: {
+            type: Object,
+            default: null,
+        },
     },
-    emits: ['update:modelValue', 'send', 'attachment', 'remove-attachment', 'pending-attachment-click'],
+    emits: ['update:modelValue', 'send', 'attachment', 'remove-attachment', 'pending-attachment-click', 'cancel-edit'],
     setup(props, { emit }) {
         const isEditing = inject(
             'isEditing',
@@ -424,6 +439,21 @@ export default {
             newValue => {
                 inputValue.value = newValue;
             }
+        );
+
+        watch(
+            () => props.editingMessage,
+            (newMessage) => {
+                if (newMessage) {
+                    inputValue.value = newMessage.text || '';
+                    nextTick(() => {
+                        if (textareaRef.value) {
+                            textareaRef.value.focus();
+                        }
+                    });
+                }
+            },
+            { immediate: true }
         );
 
         watch(inputValue, newValue => {
@@ -615,6 +645,11 @@ export default {
             emit('pending-attachment-click', { attachment, index });
         };
 
+        const handleCancelEdit = () => {
+            if (isEditing.value || props.isDisabled) return;
+            emit('cancel-edit');
+        };
+
         const isImageFile = attachment => {
             if (!attachment.type) return false;
             return attachment.type.startsWith('image/');
@@ -674,6 +709,7 @@ export default {
             handleInput,
             handleKeyDown,
             selectMention,
+            handleCancelEdit,
         };
     },
 };
@@ -949,6 +985,38 @@ export default {
             background: #e2e8f0;
             color: #94a3b8;
             box-shadow: none;
+        }
+    }
+
+    &__cancel-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: white;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        margin-right: 8px;
+
+        &:hover:not(:disabled) {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        &:active:not(:disabled) {
+            background: #e2e8f0;
+        }
+
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
     }
 

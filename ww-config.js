@@ -132,6 +132,10 @@ export default {
                 'removeIcon',
                 'removeIconColor',
                 'removeIconSize',
+                'menuTitle',
+                'menuIcon',
+                'menuIconColor',
+                'menuIconSize',
                 'mentionsTitle',
                 'mentionsColor',
                 'mentionsBgColor',
@@ -298,6 +302,32 @@ export default {
             name: 'close',
             label: { en: 'On close' },
             event: {},
+        },
+        {
+            name: 'messageEdit',
+            label: { en: 'On message edit' },
+            event: {
+                message: {
+                    id: 'msg-1',
+                    text: 'Edited message content',
+                    senderId: 'current-user',
+                    userName: 'User',
+                    timestamp: new Date().toISOString(),
+                },
+            },
+        },
+        {
+            name: 'messageDelete',
+            label: { en: 'On message delete' },
+            event: {
+                message: {
+                    id: 'msg-1',
+                    text: 'Message to delete',
+                    senderId: 'current-user',
+                    userName: 'User',
+                    timestamp: new Date().toISOString(),
+                },
+            },
         },
     ],
     actions: [
@@ -1756,6 +1786,73 @@ export default {
             propertyHelp: {
                 tooltip:
                     'Remove button icon size.\n\nExample: `16px`',
+            },
+            /* wwEditor:end */
+        },
+
+        // Message menu icon (for edit/delete)
+        menuTitle: {
+            type: 'Title',
+            label: { en: 'Message Menu Icon' },
+            section: 'style',
+        },
+        menuIcon: {
+            label: { en: 'Icon' },
+            type: 'SystemIcon',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: 'more-vertical',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Icon for the message menu button (edit/delete)',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Icon used for the message menu button that appears on hover for own messages.\n\nExample: `lucide/more-vertical`, `lucide/more-horizontal`',
+            },
+            /* wwEditor:end */
+        },
+        menuIconColor: {
+            label: { en: 'Color' },
+            type: 'Color',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: '#64748b',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Color of the message menu icon',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Message menu icon color.\n\nExample: `#64748b`',
+            },
+            /* wwEditor:end */
+        },
+        menuIconSize: {
+            label: { en: 'Size' },
+            type: 'Length',
+            section: 'style',
+            bindable: true,
+            classes: true,
+            states: true,
+            responsive: true,
+            defaultValue: '16px',
+            /* wwEditor:start */
+            bindingValidation: {
+                type: 'string',
+                tooltip: 'Size of the message menu icon',
+            },
+            propertyHelp: {
+                tooltip:
+                    'Message menu icon size.\n\nExample: `16px`',
             },
             /* wwEditor:end */
         },

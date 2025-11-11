@@ -13,7 +13,48 @@
             :class="{ 'ww-message-item__content--own': isOwnMessage }"
             :style="messageStyles"
             @contextmenu.prevent="handleRightClick"
+            @mouseenter="showMenu = isOwnMessage"
+            @mouseleave="showMenu = false"
         >
+            <!-- Menu button for own messages -->
+            <div
+                v-if="isOwnMessage"
+                class="ww-message-item__menu"
+                :class="{ 'ww-message-item__menu--visible': showMenu }"
+            >
+                <button
+                    class="ww-message-item__menu-button"
+                    @click.stop="toggleMenu"
+                    :style="{ color: menuIconColor }"
+                >
+                    <span
+                        class="ww-message-item__menu-icon"
+                        :style="{ width: menuIconSize, height: menuIconSize }"
+                        v-html="menuIconHtml"
+                    ></span>
+                </button>
+                <div
+                    v-if="showMenuDropdown"
+                    class="ww-message-item__menu-dropdown"
+                    @click.stop
+                >
+                    <button
+                        class="ww-message-item__menu-item"
+                        @click="handleEdit"
+                    >
+                        <span class="ww-message-item__menu-item-icon">✏️</span>
+                        <span>Edit</span>
+                    </button>
+                    <button
+                        class="ww-message-item__menu-item ww-message-item__menu-item--delete"
+                        @click="handleDelete"
+                    >
+                        <span class="ww-message-item__menu-item-icon">🗑️</span>
+                        <span>Delete</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Sender name if first in group -->
             <div
                 v-if="!sameSenderAsPrevious"
@@ -86,7 +127,7 @@
 </template>
 
 <script>
-import { computed, inject } from 'vue';
+import { computed, inject, ref, watchEffect, onMounted, onUnmounted } from 'vue';
 import { formatTime } from '../utils/dateTimeFormatter';
 
 export default {
@@ -172,19 +213,66 @@ export default {
             type: String,
             default: '#dbeafe',
         },
+        menuIcon: {
+            type: String,
+            default: 'more-vertical',
+        },
+        menuIconColor: {
+            type: String,
+            default: '#64748b',
+        },
+        menuIconSize: {
+            type: String,
+            default: '16px',
+        },
     },
-    emits: ['attachment-click', 'right-click'],
+    emits: ['attachment-click', 'right-click', 'edit', 'delete'],
     setup(props, { emit }) {
         const isEditing = inject(
             'isEditing',
             computed(() => false)
         );
         const chatRootEl = inject('chatRootEl', null);
+        const showMenu = ref(false);
+        const showMenuDropdown = ref(false);
+        const menuIconText = ref(null);
 
         const dateTimeOptions = inject(
             'dateTimeOptions',
             computed(() => ({}))
         );
+
+        const { getIcon } = wwLib.useIcons();
+
+        const defaultMenuIcon = `<svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <circle cx="12" cy="12" r="1"></circle>
+            <circle cx="12" cy="5" r="1"></circle>
+            <circle cx="12" cy="19" r="1"></circle>
+        </svg>`;
+
+        watchEffect(async () => {
+            try {
+                if (props.menuIcon) {
+                    menuIconText.value = await getIcon(props.menuIcon);
+                }
+            } catch (error) {
+                menuIconText.value = null;
+            }
+        });
+
+        const menuIconHtml = computed(() => {
+            return menuIconText.value || defaultMenuIcon;
+        });
 
         const messageStyles = computed(() => {
             if (props.isOwnMessage) {
@@ -271,6 +359,43 @@ export default {
                 viewportY,
             });
         };
+
+        const toggleMenu = () => {
+            showMenuDropdown.value = !showMenuDropdown.value;
+        };
+
+        const handleEdit = () => {
+            if (isEditing.value) return;
+            showMenuDropdown.value = false;
+            showMenu.value = false;
+            emit('edit', props.message);
+        };
+
+        const handleDelete = () => {
+            if (isEditing.value) return;
+            showMenuDropdown.value = false;
+            showMenu.value = false;
+            emit('delete', props.message);
+        };
+
+        // Close menu when clicking outside
+        const handleClickOutside = (event) => {
+            if (showMenuDropdown.value && !event.target.closest('.ww-message-item__menu')) {
+                showMenuDropdown.value = false;
+            }
+        };
+
+        onMounted(() => {
+            if (typeof document !== 'undefined') {
+                document.addEventListener('click', handleClickOutside);
+            }
+        });
+
+        onUnmounted(() => {
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('click', handleClickOutside);
+            }
+        });
 
         const highlightedMessageText = computed(() => {
             const text = props.message?.text || '';
@@ -371,6 +496,12 @@ export default {
             handleAttachmentClick,
             handleRightClick,
             highlightedMessageText,
+            showMenu,
+            showMenuDropdown,
+            menuIconHtml,
+            toggleMenu,
+            handleEdit,
+            handleDelete,
         };
     },
 };
@@ -529,6 +660,107 @@ export default {
     &__attachment-size {
         font-size: 0.75rem;
         opacity: 0.7;
+    }
+
+    &__menu {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        z-index: 10;
+
+        &--visible {
+            opacity: 1;
+        }
+    }
+
+    &__menu-button {
+        background: rgba(0, 0, 0, 0.05);
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 0;
+
+        &:hover {
+            background: rgba(0, 0, 0, 0.1);
+            transform: scale(1.1);
+        }
+
+        &:active {
+            transform: scale(0.95);
+        }
+    }
+
+    &__menu-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        :deep(svg) {
+            width: 100%;
+            height: 100%;
+        }
+    }
+
+    &__menu-dropdown {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 4px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        min-width: 120px;
+        overflow: hidden;
+        z-index: 1000;
+    }
+
+    &__menu-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: #334155;
+        transition: background-color 0.15s ease;
+        text-align: left;
+
+        &:hover {
+            background-color: #f1f5f9;
+        }
+
+        &--delete {
+            color: #ef4444;
+
+            &:hover {
+                background-color: #fee2e2;
+            }
+        }
+    }
+
+    &__menu-item-icon {
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    &__content {
+        position: relative;
+
+        &:hover .ww-message-item__menu {
+            opacity: 1;
+        }
     }
 }
 </style>

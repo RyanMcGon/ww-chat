@@ -38,8 +38,13 @@
                     :own-message-radius="ownMessageRadius"
                     :mentions-color="mentionsColor"
                     :mentions-bg-color="mentionsBgColor"
+                    :menu-icon="menuIcon"
+                    :menu-icon-color="menuIconColor"
+                    :menu-icon-size="menuIconSize"
                     @attachment-click="handleAttachmentClick"
                     @right-click="handleRightClick"
+                    @edit="handleEdit"
+                    @delete="handleDelete"
                 />
             </div>
         </transition-group>
@@ -153,8 +158,20 @@ export default {
             type: String,
             default: '#dbeafe',
         },
+        menuIcon: {
+            type: String,
+            default: 'more-vertical',
+        },
+        menuIconColor: {
+            type: String,
+            default: '#64748b',
+        },
+        menuIconSize: {
+            type: String,
+            default: '16px',
+        },
     },
-    emits: ['attachment-click', 'message-right-click'],
+    emits: ['attachment-click', 'message-right-click', 'message-edit', 'message-delete'],
     setup(props, { emit }) {
         const isEditing = inject(
             'isEditing',
@@ -260,12 +277,24 @@ export default {
             });
         };
 
+        const handleEdit = (message) => {
+            if (isEditing.value) return;
+            emit('message-edit', message);
+        };
+
+        const handleDelete = (message) => {
+            if (isEditing.value) return;
+            emit('message-delete', message);
+        };
+
         return {
             groupedMessages,
             isSameSenderAsPrevious,
             isSameSenderAsNext,
             handleAttachmentClick,
             handleRightClick,
+            handleEdit,
+            handleDelete,
             emptyMessageStyle,
             dateSeparatorStyle,
             dateTimeOptions,

@@ -50,8 +50,13 @@
                 :date-separator-border-radius="dateSeparatorBorderRadius"
                 :mentions-color="mentionsColor"
                 :mentions-bg-color="mentionsBgColor"
+                :menu-icon="menuIcon"
+                :menu-icon-color="menuIconColor"
+                :menu-icon-size="menuIconSize"
                 @attachment-click="handleAttachmentClick"
                 @message-right-click="handleMessageRightClick"
+                @message-edit="handleMessageEdit"
+                @message-delete="handleMessageDelete"
             />
         </div>
 
@@ -100,10 +105,12 @@
             :attachment-button-border-radius="attachmentButtonBorderRadius"
             :attachment-button-size="attachmentButtonSize"
             :attachment-button-box-shadow="attachmentButtonBoxShadow"
+            :editing-message="editingMessage"
             @send="sendMessage"
             @attachment="handleAttachment"
             @remove-attachment="handleRemoveAttachment"
             @pending-attachment-click="handlePendingAttachmentClick"
+            @cancel-edit="handleCancelEdit"
         />
     </div>
 </template>
@@ -202,6 +209,7 @@ export default {
         const newMessage = ref('');
         const isScrolling = ref(false);
         const pendingAttachments = ref([]);
+        const editingMessage = ref(null);
 
         const debounce = (func, delay) => {
             let timeoutId;
@@ -475,6 +483,25 @@ export default {
         const sendMessage = (mentions = []) => {
             if (isEditing.value || isDisabled.value || (!newMessage.value.trim() && pendingAttachments.value.length === 0)) return;
 
+            // If editing a message, emit edit event instead
+            if (editingMessage.value) {
+                const updatedMessage = {
+                    ...editingMessage.value,
+                    text: newMessage.value.trim(),
+                    timestamp: new Date().toISOString(),
+                };
+
+                editingMessage.value = null;
+                newMessage.value = '';
+                currentMentions.value = [];
+
+                emit('trigger-event', {
+                    name: 'messageEdit',
+                    event: { message: updatedMessage },
+                });
+                return;
+            }
+
             const attachments = [...pendingAttachments.value];
             // For the emitted event, only expose File objects (no id/url metadata)
             const attachmentsForEvent = attachments
@@ -570,6 +597,36 @@ export default {
                 name: 'close',
                 event: {},
             });
+        };
+
+        const handleMessageEdit = (message) => {
+            if (isEditing.value) return;
+            
+            editingMessage.value = message;
+            newMessage.value = message.text || '';
+            
+            // Scroll to input area
+            nextTick(() => {
+                const inputArea = chatRoot.value?.querySelector('.ww-chat-input-area__input');
+                if (inputArea) {
+                    inputArea.focus();
+                    inputArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+        };
+
+        const handleMessageDelete = (message) => {
+            if (isEditing.value) return;
+
+            emit('trigger-event', {
+                name: 'messageDelete',
+                event: { message },
+            });
+        };
+
+        const handleCancelEdit = () => {
+            editingMessage.value = null;
+            newMessage.value = '';
         };
 
         const addMessage = message => {
@@ -1039,6 +1096,9 @@ export default {
             removeIcon: computed(() => props.content?.removeIcon || 'x'),
             removeIconColor: computed(() => props.content?.removeIconColor || '#f43f5e'),
             removeIconSize: computed(() => props.content?.removeIconSize || '12px'),
+            menuIcon: computed(() => props.content?.menuIcon || 'more-vertical'),
+            menuIconColor: computed(() => props.content?.menuIconColor || '#64748b'),
+            menuIconSize: computed(() => props.content?.menuIconSize || '16px'),
 
             // Mentions
             mentionsColor: computed(() => props.content?.mentionsColor || '#3b82f6'),
@@ -1067,9 +1127,13 @@ export default {
             handlePendingAttachmentClick,
             handleAttachmentClick,
             handleMessageRightClick,
+            handleMessageEdit,
+            handleMessageDelete,
+            handleCancelEdit,
             handleClose,
             addMessage,
             currentLocalContext,
+            editingMessage,
             // exposed for CSS variables
             messagesAttachmentThumbMaxWidth,
             messagesAttachmentThumbMaxHeight,
