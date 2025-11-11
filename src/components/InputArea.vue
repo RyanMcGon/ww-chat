@@ -136,27 +136,34 @@
                     </button>
                 </div>
 
+                <div
+                    v-if="allowRichText"
+                    ref="richInputRef"
+                    class="ww-chat-input-area__rich-input"
+                    :class="{ 'ww-chat-input-area__rich-input--disabled': isUiDisabled }"
+                    :data-placeholder="placeholder"
+                    contenteditable="true"
+                    @input="handleRichInput"
+                    @keydown="handleRichKeyDown"
+                    @keyup="updateRichSelection"
+                    @mouseup="updateRichSelection"
+                ></div>
+
                 <textarea
+                    v-else
                     ref="textareaRef"
                     v-model="inputValue"
                     class="ww-chat-input-area__input"
                     :placeholder="placeholder"
                     :disabled="isUiDisabled"
                     :style="inputStyles"
-                    @keydown.enter="onEnterKey"
+                    @keydown="onEnterKey"
                     @input="handleRawInput"
-                    @keydown="handleKeyDown"
+                    @keydown.capture="handleKeyDown"
                     @keyup="updateSelection"
                     @click="updateSelection"
                     @select="updateSelection"
                 ></textarea>
-
-                <div
-                    v-if="allowRichText"
-                    class="ww-chat-input-area__preview"
-                    :class="{ 'ww-chat-input-area__preview--empty': !inputValue.trim() }"
-                    v-html="richPreviewHtml"
-                ></div>
 
                 <!-- Mentions dropdown -->
                 <div
@@ -225,6 +232,90 @@
 import { ref, computed, watch, nextTick, inject, watchEffect } from 'vue';
 import { formatRichText } from '../utils/richTextFormatter';
 
+const getFrontWindow = () => {
+    try {
+        return wwLib?.getFrontWindow ? wwLib.getFrontWindow() : window;
+    } catch (error) {
+        return window;
+    }
+};
+
+const getFrontDocument = () => {
+    try {
+        return wwLib?.getFrontDocument ? wwLib.getFrontDocument() : document;
+    } catch (error) {
+        return document;
+    }
+};
+
+const convertHtmlToMarkdown = (html) => {
+    const doc = document.createElement('div');
+    doc.innerHTML = html || '';
+
+    const walkNodes = (node) => {
+        if (!node) return '';
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            return node.nodeValue || '';
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+            return '';
+        }
+
+        const tag = node.tagName.toLowerCase();
+        const children = Array.from(node.childNodes).map(walkNodes).join('');
+
+        if (node.classList?.contains('ww-message-item__mention')) {
+            return node.textContent || '';
+        }
+
+        switch (tag) {
+            case 'br':
+                return '\n';
+            case 'strong':
+            case 'b':
+                return children ? `**${children}**` : '';
+            case 'em':
+            case 'i':
+                return children ? `*${children}*` : '';
+            case 'code':
+                return children ? `\`${children}\`` : '';
+            case 's':
+            case 'strike':
+                return children ? `~~${children}~~` : '';
+            case 'a': {
+                const href = node.getAttribute('href') || '';
+                const label = children || href;
+                return href ? `[${label}](${href})` : label;
+            }
+            case 'li': {
+                const liContent = children.trim();
+                return liContent ? `- ${liContent}\n` : '';
+            }
+            case 'ul':
+            case 'ol':
+            case 'div':
+            case 'p': {
+                const block = Array.from(node.childNodes).map(walkNodes).join('');
+                return block ? `${block}\n` : '';
+            }
+            case 'span':
+                return children;
+            default:
+                return Array.from(node.childNodes).map(walkNodes).join('');
+        }
+    };
+
+    const markdown = Array.from(doc.childNodes).map(walkNodes).join('');
+    const plainText = doc.textContent || '';
+
+    return {
+        markdown: markdown.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trimEnd(),
+        plainText: plainText.replace(/\u00a0/g, ' '),
+    };
+};
+
 export default {
     name: 'InputArea',
     props: {
@@ -240,7 +331,6 @@ export default {
             type: String,
             default: '',
         },
-        // Alignment and button styles
         actionAlign: { type: String, default: 'end' },
         sendButtonBgColor: { type: String, default: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
         sendButtonHoverBgColor: { type: String, default: 'linear-gradient(135deg, #2563eb, #1d4ed8)' },
@@ -318,7 +408,6 @@ export default {
             type: String,
             default: 'Type a message...',
         },
-        // Icon properties
         sendIcon: {
             type: String,
             default: 'send',
@@ -379,27 +468,47 @@ export default {
             computed(() => false)
         );
         const textareaRef = ref(null);
+        const richInputRef = ref(null);
         const inputValue = ref(props.modelValue);
+        const plainTextValue = ref(props.modelValue || '');
         const sendIconText = ref(null);
         const attachmentIconText = ref(null);
         const removeIconText = ref(null);
         const selectionRange = ref({ start: 0, end: 0 });
+        const isSyncingRich = ref(false);
 
         const focusTextarea = () => {
+            if (props.allowRichText) {
+                if (richInputRef.value) richInputRef.value.focus();
+                return;
+            }
             if (textareaRef.value) {
                 textareaRef.value.focus();
             }
         };
 
         const updateSelection = () => {
-            if (!textareaRef.value) return;
-            selectionRange.value = {
-                start: textareaRef.value.selectionStart ?? 0,
-                end: textareaRef.value.selectionEnd ?? 0,
-            };
+            if (textareaRef.value) {
+                selectionRange.value = {
+                    start: textareaRef.value.selectionStart ?? 0,
+                    end: textareaRef.value.selectionEnd ?? 0,
+                };
+            }
         };
 
-        // Mentions state
+        const updateRichSelection = () => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            const frontWindow = getFrontWindow();
+            const selection = frontWindow.getSelection();
+            if (!selection || selection.rangeCount === 0) return;
+            const range = selection.getRangeAt(0);
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(richInputRef.value);
+            preRange.setEnd(range.endContainer, range.endOffset);
+            const caret = preRange.toString().length;
+            processMentionState(plainTextValue.value, caret);
+        };
+
         const showMentionsDropdown = ref(false);
         const mentionSearchText = ref('');
         const mentionStartPos = ref(-1);
@@ -496,18 +605,11 @@ export default {
             return removeIconText.value || defaultRemoveIcon;
         });
 
-        const canSend = computed(() => inputValue.value.trim().length > 0 || props.pendingAttachments.length > 0);
-        const isUiDisabled = computed(() => props.isDisabled || isEditing.value);
-        const richPreviewHtml = computed(() => {
-            if (!props.allowRichText) return '';
-            return formatRichText(
-                inputValue.value,
-                mentions.value,
-                true,
-                props.mentionsColor,
-                props.mentionsBgColor
-            );
+        const canSend = computed(() => {
+            const text = props.allowRichText ? plainTextValue.value : inputValue.value;
+            return text.trim().length > 0 || props.pendingAttachments.length > 0;
         });
+        const isUiDisabled = computed(() => props.isDisabled || isEditing.value);
 
         const alignItemsCss = computed(() => {
             if (props.actionAlign === 'start') return 'flex-start';
@@ -537,25 +639,104 @@ export default {
             '--btn-hover-bg': props.attachmentButtonHoverBgColor,
         }));
 
-        const resizeTextarea = () => {
-            // No longer needed since we use fixed height
-            // The textarea will maintain its fixed height
+        const syncRichEditor = () => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            isSyncingRich.value = true;
+            const html = formatRichText(
+                inputValue.value || '',
+                mentions.value,
+                true,
+                props.mentionsColor,
+                props.mentionsBgColor
+            );
+            richInputRef.value.innerHTML = html || '';
+            plainTextValue.value = richInputRef.value.textContent?.replace(/\u00a0/g, ' ') || '';
+            nextTick(() => {
+                isSyncingRich.value = false;
+            });
         };
+
+        watch(
+            () => props.modelValue,
+            newValue => {
+                inputValue.value = newValue || '';
+                if (!props.allowRichText) {
+                    plainTextValue.value = inputValue.value;
+                    nextTick(() => {
+                        const textarea = textareaRef.value;
+                        if (textarea) {
+                            const length = inputValue.value.length;
+                            textarea.setSelectionRange(length, length);
+                            updateSelection();
+                        }
+                        processMentionState(plainTextValue.value, plainTextValue.value.length);
+                    });
+                } else {
+                    syncRichEditor();
+                    nextTick(() => {
+                        processMentionState(plainTextValue.value, plainTextValue.value.length);
+                    });
+                }
+            }
+        );
+
+        watch(
+            () => props.editingMessage,
+            (newMessage) => {
+                if (newMessage) {
+                    inputValue.value = newMessage.text || '';
+                    if (props.allowRichText) {
+                        syncRichEditor();
+                        nextTick(() => {
+                            if (richInputRef.value) {
+                                focusTextarea();
+                                processMentionState(plainTextValue.value, plainTextValue.value.length);
+                            }
+                        });
+                    } else {
+                        plainTextValue.value = inputValue.value;
+                        nextTick(() => {
+                            if (textareaRef.value) {
+                                textareaRef.value.focus();
+                                const length = inputValue.value.length;
+                                textareaRef.value.setSelectionRange(length, length);
+                                updateSelection();
+                            }
+                            processMentionState(plainTextValue.value, plainTextValue.value.length);
+                        });
+                    }
+                }
+            },
+            { immediate: true }
+        );
+
+        watch(inputValue, newValue => {
+            emit('update:modelValue', newValue);
+        });
 
         const onEnterKey = event => {
             if (isEditing.value) return;
 
-            updateSelection();
+            if (props.allowRichText) {
+                updateRichSelection();
+                if (showMentionsDropdown.value && !event.shiftKey) {
+                    event.preventDefault();
+                    return;
+                }
+                if (event.shiftKey) return;
+                event.preventDefault();
+                if (!props.isDisabled && canSend.value) {
+                    sendMessage();
+                }
+                return;
+            }
 
+            updateSelection();
             if (showMentionsDropdown.value && !event.shiftKey) {
                 event.preventDefault();
                 return;
             }
-
-            if (event.shiftKey) {
-                return; // allow newline
-            }
-
+            if (event.shiftKey) return;
             if (!props.isDisabled) {
                 event.preventDefault();
                 if (canSend.value) {
@@ -569,14 +750,18 @@ export default {
 
             emit('send', mentions.value);
             inputValue.value = '';
+            plainTextValue.value = '';
             mentions.value = [];
             showMentionsDropdown.value = false;
             selectionRange.value = { start: 0, end: 0 };
+            if (props.allowRichText && richInputRef.value) {
+                richInputRef.value.innerHTML = '';
+            } else if (textareaRef.value) {
+                textareaRef.value.value = '';
+            }
         };
 
-        // Mentions functionality
         const availableParticipants = computed(() => {
-            // Filter out current user and already mentioned users
             const mentionedIds = mentions.value.map(m => m.id);
             return (props.participants || []).filter(p => 
                 p?.id !== props.currentUserId && !mentionedIds.includes(p.id)
@@ -585,7 +770,6 @@ export default {
 
         const filteredParticipants = computed(() => {
             if (!mentionSearchText.value) return availableParticipants.value;
-            
             const search = mentionSearchText.value.toLowerCase();
             return availableParticipants.value.filter(p => 
                 p?.name?.toLowerCase().includes(search)
@@ -607,10 +791,76 @@ export default {
                 .slice(0, 2);
         };
 
+        const handleRawInput = (event) => {
+            const textarea = textareaRef.value;
+            if (!textarea) return;
+            const text = event.target.value ?? '';
+            inputValue.value = text;
+            plainTextValue.value = text;
+            const cursorPos = textarea.selectionStart ?? text.length;
+            processMentionState(text, cursorPos);
+            updateSelection();
+        };
+
+        const handleRichInput = () => {
+            if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
+            const html = richInputRef.value.innerHTML;
+            const { markdown, plainText } = convertHtmlToMarkdown(html);
+            inputValue.value = markdown;
+            plainTextValue.value = plainText;
+            const caret = getCaretOffsetFromRich();
+            processMentionState(plainText, caret);
+        };
+
+        const handleRichKeyDown = (event) => {
+            if (event.key === 'Enter') {
+                onEnterKey(event);
+                return;
+            }
+            if (showMentionsDropdown.value) {
+                handleKeyDown(event);
+            }
+        };
+
+        const getCaretOffsetFromRich = () => {
+            const frontWindow = getFrontWindow();
+            const selection = frontWindow.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                return plainTextValue.value.length;
+            }
+            const range = selection.getRangeAt(0);
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(richInputRef.value);
+            preRange.setEnd(range.endContainer, range.endOffset);
+            return preRange.toString().length;
+        };
+
+        const processMentionState = (text, cursorPos) => {
+            const safeText = text ?? '';
+            plainTextValue.value = safeText;
+            const textBeforeCursor = safeText.substring(0, cursorPos);
+            const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+            if (lastAtIndex !== -1) {
+                const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+                if (!/\s/.test(textAfterAt)) {
+                    mentionStartPos.value = lastAtIndex;
+                    mentionSearchText.value = textAfterAt;
+                    showMentionsDropdown.value = true;
+                    selectedMentionIndex.value = 0;
+                    checkRemovedMentions();
+                    return;
+                }
+            }
+
+            showMentionsDropdown.value = false;
+            mentionSearchText.value = '';
+            mentionStartPos.value = -1;
+            checkRemovedMentions();
+        };
+
         const checkRemovedMentions = () => {
-            const text = inputValue.value || '';
-            
-            // Filter out mentions whose text is no longer in the input
+            const text = plainTextValue.value || '';
             mentions.value = mentions.value.filter(mention => {
                 const mentionText = `@${mention.name}`;
                 return text.includes(mentionText);
@@ -618,8 +868,7 @@ export default {
         };
 
         const insertFormatting = (prefix, suffix, placeholder = '') => {
-            if (isUiDisabled.value) return;
-            if (!textareaRef.value) return;
+            if (isUiDisabled.value || !textareaRef.value) return;
 
             const text = inputValue.value || '';
             let { start, end } = selectionRange.value;
@@ -635,6 +884,7 @@ export default {
             const newCursorEnd = newCursorStart + selectedText.length;
 
             inputValue.value = newText;
+            plainTextValue.value = newText.replace(/[*_~`]/g, '');
 
             nextTick(() => {
                 if (!textareaRef.value) return;
@@ -642,10 +892,55 @@ export default {
                 textareaRef.value.setSelectionRange(newCursorStart, newCursorEnd);
                 updateSelection();
                 checkRemovedMentions();
+                processMentionState(plainTextValue.value, newCursorEnd);
             });
         };
 
+        const applyRichFormat = (format) => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            const doc = getFrontDocument();
+            const win = getFrontWindow();
+            focusTextarea();
+
+            if (format === 'bold') {
+                doc.execCommand('bold');
+            } else if (format === 'italic') {
+                doc.execCommand('italic');
+            } else if (format === 'strike') {
+                doc.execCommand('strikeThrough');
+            } else if (format === 'bullet') {
+                doc.execCommand('insertUnorderedList');
+            } else if (format === 'link') {
+                const promptFn = win?.prompt ? win.prompt.bind(win) : undefined;
+                const url = promptFn ? promptFn('Enter URL', 'https://') : undefined;
+                if (url) {
+                    doc.execCommand('createLink', false, url);
+                }
+            } else if (format === 'code') {
+                const selection = win.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    const codeEl = doc.createElement('code');
+                    try {
+                        range.surroundContents(codeEl);
+                    } catch (_) {
+                        const content = range.cloneContents();
+                        codeEl.appendChild(content);
+                        range.deleteContents();
+                        range.insertNode(codeEl);
+                    }
+                }
+            }
+
+            handleRichInput();
+        };
+
         const applyFormat = (format) => {
+            if (props.allowRichText) {
+                applyRichFormat(format);
+                return;
+            }
+
             if (isUiDisabled.value) return;
             if (!textareaRef.value) return;
 
@@ -683,6 +978,7 @@ export default {
                 const newText = `${text.slice(0, lineStart)}- ${text.slice(lineStart)}`;
                 const offset = 2;
                 inputValue.value = newText;
+                plainTextValue.value = newText.replace(/[*_~`]/g, '');
                 const newStart = start + offset;
                 const newEnd = end + offset;
                 nextTick(() => {
@@ -691,12 +987,12 @@ export default {
                     textareaRef.value.setSelectionRange(newStart, newEnd);
                     updateSelection();
                     checkRemovedMentions();
-                    processMentionState(inputValue.value, newEnd);
+                    processMentionState(plainTextValue.value, newEnd);
                 });
                 return;
             }
             if (format === 'link') {
-                const frontWindow = wwLib?.getFrontWindow ? wwLib.getFrontWindow() : undefined;
+                const frontWindow = getFrontWindow();
                 const promptFn = frontWindow?.prompt ? frontWindow.prompt.bind(frontWindow) : undefined;
                 const url = promptFn ? promptFn('Enter URL', 'https://') : undefined;
                 if (!url) {
@@ -718,6 +1014,7 @@ export default {
                 const labelEnd = labelStart + selectedText.length;
 
                 inputValue.value = newText;
+                plainTextValue.value = newText.replace(/[*_~`\[\]]/g, '');
 
                 nextTick(() => {
                     if (!textareaRef.value) return;
@@ -725,6 +1022,7 @@ export default {
                     textareaRef.value.setSelectionRange(labelStart, labelEnd);
                     updateSelection();
                     checkRemovedMentions();
+                    processMentionState(plainTextValue.value, labelEnd);
                 });
                 return;
             }
@@ -758,38 +1056,72 @@ export default {
         const selectMention = (participant) => {
             if (!participant || mentionStartPos.value === -1) return;
 
+            if (props.allowRichText && richInputRef.value) {
+                const doc = getFrontDocument();
+                const win = getFrontWindow();
+                const selection = win.getSelection();
+                if (!selection || selection.rangeCount === 0) return;
+                const range = selection.getRangeAt(0);
+
+                const mentionSpan = doc.createElement('span');
+                mentionSpan.className = 'ww-message-item__mention';
+                mentionSpan.textContent = `@${participant.name}`;
+                const trailingSpace = doc.createTextNode(' ');
+
+                range.deleteContents();
+                range.insertNode(trailingSpace);
+                range.insertNode(mentionSpan);
+
+                mentions.value = addMention(participant, mentions.value);
+
+                showMentionsDropdown.value = false;
+                mentionSearchText.value = '';
+                mentionStartPos.value = -1;
+
+                const newRange = doc.createRange();
+                newRange.setStartAfter(trailingSpace);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+
+                handleRichInput();
+                return;
+            }
+
             const textarea = textareaRef.value;
             if (!textarea) return;
 
             const text = inputValue.value || '';
             const before = text.substring(0, mentionStartPos.value);
             const after = text.substring(textarea.selectionStart);
-            
             const mentionText = `@${participant.name}`;
             inputValue.value = before + mentionText + ' ' + after;
+            plainTextValue.value = inputValue.value.replace(/[*_~`]/g, '');
 
-            // Add to mentions array (check by ID to avoid duplicates)
-            const existingMention = mentions.value.find(m => m.id === participant.id);
-            if (!existingMention) {
-                mentions.value.push({
-                    id: participant.id,
-                    name: participant.name,
-                    avatar: participant.avatar || '',
-                });
-            }
+            mentions.value = addMention(participant, mentions.value);
 
-            // Reset mention state
             showMentionsDropdown.value = false;
             mentionSearchText.value = '';
             mentionStartPos.value = -1;
 
-            // Set cursor position after the mention
             nextTick(() => {
                 const newCursorPos = before.length + mentionText.length + 1;
                 textarea.setSelectionRange(newCursorPos, newCursorPos);
                 updateSelection();
                 textarea.focus();
             });
+        };
+
+        const addMention = (participant, mentionArray) => {
+            const existingMention = mentionArray.find(m => m.id === participant.id);
+            if (!existingMention) {
+                mentionArray.push({
+                    id: participant.id,
+                    name: participant.name,
+                    avatar: participant.avatar || '',
+                });
+            }
+            return mentionArray;
         };
 
         const handleAttachment = event => {
@@ -830,93 +1162,21 @@ export default {
             return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${sizes[i]}`;
         };
 
-        const handleRawInput = (event) => {
-            const textarea = textareaRef.value;
-            if (!textarea) return;
-
-            const text = event.target.value ?? '';
-            inputValue.value = text;
-            const cursorPos = textarea.selectionStart ?? text.length;
-            processMentionState(text, cursorPos);
-            updateSelection();
-        };
-
-        const processMentionState = (text, cursorPos) => {
-            const textBeforeCursor = text.substring(0, cursorPos);
-            const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-            if (lastAtIndex !== -1) {
-                const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-                if (!/\s/.test(textAfterAt)) {
-                    mentionStartPos.value = lastAtIndex;
-                    mentionSearchText.value = textAfterAt;
-                    showMentionsDropdown.value = true;
-                    selectedMentionIndex.value = 0;
-                    checkRemovedMentions();
-                    return;
-                }
-            }
-
-            showMentionsDropdown.value = false;
-            mentionSearchText.value = '';
-            mentionStartPos.value = -1;
-            checkRemovedMentions();
-        };
-
-        watch(
-            () => props.modelValue,
-            newValue => {
-                inputValue.value = newValue || '';
-                nextTick(() => {
-                    const textarea = textareaRef.value;
-                    const length = inputValue.value.length;
-                    if (textarea) {
-                        textarea.setSelectionRange(length, length);
-                        updateSelection();
-                    }
-                    processMentionState(inputValue.value, length);
-                });
-            }
-        );
-
-        watch(
-            () => props.editingMessage,
-            (newMessage) => {
-                if (newMessage) {
-                    inputValue.value = newMessage.text || '';
-                    nextTick(() => {
-                        const textarea = textareaRef.value;
-                        const length = inputValue.value.length;
-                        if (textarea) {
-                            textarea.focus();
-                            textarea.setSelectionRange(length, length);
-                            updateSelection();
-                        }
-                        processMentionState(inputValue.value, length);
-                    });
-                }
-            },
-            { immediate: true }
-        );
-
-        watch(inputValue, newValue => {
-            emit('update:modelValue', newValue);
-        });
-
-            return {
-                textareaRef,
-                inputValue,
-                canSend,
-                isUiDisabled,
-                sendIconHtml,
-                attachmentIconHtml,
-                removeIconHtml,
-                alignItemsCss,
-                sendButtonStyle,
-                attachmentButtonStyle,
-                inputAreaStyles: computed(() => ({
-                    borderTop: props.inputAreaBorder,
-                })),
+        return {
+            textareaRef,
+            richInputRef,
+            inputValue,
+            canSend,
+            isUiDisabled,
+            sendIconHtml,
+            attachmentIconHtml,
+            removeIconHtml,
+            alignItemsCss,
+            sendButtonStyle,
+            attachmentButtonStyle,
+            inputAreaStyles: computed(() => ({
+                borderTop: props.inputAreaBorder,
+            })),
             inputStyles: computed(() => ({
                 backgroundColor: props.inputBgColor,
                 color: props.inputTextColor,
@@ -931,7 +1191,6 @@ export default {
                 color: props.inputTextColor,
                 opacity: props.isDisabled ? 0.5 : 1,
             })),
-            richPreviewHtml,
             allowRichText: computed(() => props.allowRichText),
             isImageFile,
             formatFileSize,
@@ -954,6 +1213,9 @@ export default {
             handleCancelEdit,
             applyFormat,
             updateSelection,
+            updateRichSelection,
+            handleRichInput,
+            handleRichKeyDown,
         };
     },
 };
@@ -1196,65 +1458,81 @@ export default {
     }
 
     &__rich-input {
-        width: 100%;
-        height: v-bind('inputHeight');
-        padding: calc((v-bind('inputHeight') - 1.5em) / 2) 16px;
+        min-height: v-bind('inputHeight');
         border-radius: v-bind('inputBorderRadius');
         font-size: v-bind('inputFontSize');
         font-weight: v-bind('inputFontWeight');
         font-family: v-bind('inputFontFamily');
         line-height: 1.5;
-        overflow-y: auto;
-        scrollbar-width: none; /* Firefox */
-        -ms-overflow-style: none; /* IE/Edge */
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: calc((v-bind('inputHeight') - 1.5em) / 2) 16px;
+        border: v-bind('textareaBorder');
         background-color: v-bind('inputBgColor');
         color: v-bind('inputTextColor');
-        border: var(--textarea-border);
+        overflow-y: auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-        vertical-align: bottom;
-        align-self: flex-end;
-        margin: 0;
-        min-height: 38px; /* Ensure minimum height for rich text */
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         outline: none;
-        white-space: pre-wrap; /* Preserve whitespace and line breaks */
-        word-break: break-word;
-
-        &::-webkit-scrollbar {
-            width: 0;
-            height: 0;
-        }
-
-        &::placeholder {
-            color: v-bind('inputPlaceholderColor');
-            font-weight: 400;
-        }
+        white-space: pre-wrap;
 
         &:hover {
-            border: var(--textarea-border-hover);
+            border: v-bind('textareaBorderHover');
         }
 
         &:focus {
-            outline: none;
-            border: var(--textarea-border-focus);
+            border: v-bind('textareaBorderFocus');
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
             transform: translateY(-1px);
         }
 
-        &:disabled {
+        &::selection {
+            background: rgba(59, 130, 246, 0.25);
+        }
+
+        &:empty::before {
+            content: attr(data-placeholder);
+            color: v-bind('inputPlaceholderColor');
+            font-weight: 400;
+            pointer-events: none;
+        }
+
+        &--disabled {
             opacity: 0.6;
             cursor: not-allowed;
             background-color: #f8fafc;
         }
 
-        &--disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            pointer-events: none;
-            background-color: #f8fafc;
-            color: #94a3b8;
-            border-color: #e2e8f0;
-            box-shadow: none;
+        :deep(strong) {
+            font-weight: 600;
+        }
+
+        :deep(em) {
+            font-style: italic;
+        }
+
+        :deep(code) {
+            background-color: rgba(0, 0, 0, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85em;
+        }
+
+        :deep(s) {
+            text-decoration: line-through;
+        }
+
+        :deep(a) {
+            color: v-bind('inputTextColor');
+            text-decoration: underline;
+        }
+
+        :deep(ul) {
+            padding-left: 1.2rem;
+            margin: 0.35rem 0;
+        }
+
+        :deep(li) {
+            margin: 0.2rem 0;
         }
     }
 
