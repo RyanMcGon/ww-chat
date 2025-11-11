@@ -572,7 +572,10 @@ export default {
                         attachments: messageToEdit.attachments,
                         mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
                         userSettings: messageToEdit.userSettings,
-                        _originalData: updatedOriginalData,
+                        _originalData: {
+                            ...updatedOriginalData,
+                            text: trimmedMessageText,
+                        },
                     };
 
                     // Clear edit state before emitting to avoid race conditions, but keep input value until after emit
