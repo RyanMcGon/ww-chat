@@ -551,6 +551,18 @@ export default {
                     editingMessage.value = null;
                     setEditingMessageState(null);
                 } else {
+                    const updatedOriginalData = {
+                        ...(messageToEdit._originalData || {}),
+                        id: messageToEdit.id,
+                        text: trimmedMessageText,
+                        senderId: messageToEdit.senderId,
+                        userName: messageToEdit.userName,
+                        timestamp: messageToEdit.timestamp,
+                        attachments: messageToEdit.attachments,
+                        mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
+                        userSettings: messageToEdit.userSettings,
+                    };
+
                     const updatedMessage = {
                         id: messageToEdit.id,
                         text: trimmedMessageText,
@@ -560,7 +572,7 @@ export default {
                         attachments: messageToEdit.attachments,
                         mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
                         userSettings: messageToEdit.userSettings,
-                        _originalData: messageToEdit._originalData,
+                        _originalData: updatedOriginalData,
                     };
 
                     // Clear edit state before emitting to avoid race conditions, but keep input value until after emit
@@ -600,7 +612,7 @@ export default {
 
             const messageId = wwLib.wwUtils.getUid();
 
-            const messagePayload = {
+            const baseMessage = {
                 id: messageId,
                 text: trimmedMessageText,
                 senderId: currentUserId.value,
@@ -616,6 +628,15 @@ export default {
                           userStatus: currentUserParticipant.value.status,
                       }
                     : {},
+            };
+
+            const originalDataPayload = {
+                ...baseMessage,
+            };
+
+            const messagePayload = {
+                ...baseMessage,
+                _originalData: originalDataPayload,
             };
 
             emit('trigger-event', {
