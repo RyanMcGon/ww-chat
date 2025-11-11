@@ -165,13 +165,6 @@
                     @select="updateSelection"
                 ></textarea>
 
-                <div
-                    v-if="allowRichText"
-                    class="ww-chat-input-area__preview"
-                    :class="{ 'ww-chat-input-area__preview--empty': !inputValue.trim() }"
-                    v-html="richPreviewHtml"
-                ></div>
-
                 <!-- Mentions dropdown -->
                 <div
                     v-if="showMentionsDropdown"
@@ -1632,6 +1625,20 @@ export default {
             overflow-y: auto;
         }
 
+        &:hover {
+            border: v-bind('textareaBorderHover');
+        }
+
+        &:focus {
+            border: v-bind('textareaBorderFocus');
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
+        }
+
+        &::selection {
+            background: rgba(59, 130, 246, 0.25);
+        }
+
         &:empty::before {
             content: attr(data-placeholder);
             color: v-bind('inputPlaceholderColor');
@@ -1643,6 +1650,7 @@ export default {
             opacity: 0.6;
             cursor: not-allowed;
             background-color: #f8fafc;
+            overflow-y: hidden;
         }
 
         :deep(strong) {
@@ -1891,49 +1899,6 @@ export default {
         text-align: center;
         color: #94a3b8;
         font-size: 14px;
-        font-style: italic;
-    }
-
-    &__preview {
-        margin-top: 6px;
-        padding: 10px 14px;
-        border-radius: v-bind('inputBorderRadius');
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        background: rgba(148, 163, 184, 0.08);
-        font-size: v-bind('inputFontSize');
-        font-family: v-bind('inputFontFamily');
-        color: v-bind('inputTextColor');
-        max-height: calc(var(--rich-input-max-height, 260px));
-        overflow-y: auto;
-
-        :deep(strong) {
-            font-weight: 600;
-        }
-
-        :deep(em) {
-            font-style: italic;
-        }
-
-        :deep(code) {
-            background-color: rgba(0, 0, 0, 0.08);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.85em;
-        }
-
-        :deep(s) {
-            text-decoration: line-through;
-        }
-
-        :deep(a) {
-            color: inherit;
-            text-decoration: underline;
-        }
-    }
-
-    &__preview--empty {
-        color: #94a3b8;
         font-style: italic;
     }
 }
