@@ -1,18 +1,20 @@
 # WW-CHAT
 
-A modern, feature-rich chat component for WeWeb with support for mentions, attachments, real-time messaging, and customizable styling.
+A modern, feature-rich chat component for WeWeb with support for mentions,
+attachments, real-time messaging, and customizable styling.
 
 ## Features
 
--   💬 **Real-time messaging** with automatic scrolling
--   👥 **@Mentions** with dropdown selection and custom highlighting
--   📎 **File attachments** with preview support
--   🎨 **Fully customizable** styling (colors, fonts, borders, etc.)
--   👤 **User avatars** and status indicators
--   📅 **Date separators** for message grouping
--   🔔 **Event triggers** for message sent, attachment clicks, etc.
--   🌍 **Localization** support for dates and times
--   ♿ **Accessible** with keyboard navigation
+- 💬 **Real-time messaging** with automatic scrolling
+- 👥 **@Mentions** with dropdown selection and custom highlighting
+- ✏️ **Edit & delete** controls for your own messages (with built-in safety for
+  pending messages)
+- 🎨 **Fully customizable** styling (colors, fonts, borders, etc.)
+- 👤 **User avatars** and status indicators
+- 📅 **Date separators** for message grouping
+- 🔔 **Event triggers** for message sent, attachment clicks, etc.
+- 🌍 **Localization** support for dates and times
+- ♿ **Accessible** with keyboard navigation
 
 ## Installation
 
@@ -20,11 +22,13 @@ To run locally, first install all dependencies with `npm install`.
 
 ## Development
 
-To serve locally, run `npm run serve --port=[PORT]`, and then go to WeWeb editor, open developer popup and add `localhost:[PORT]` as custom element.
+To serve locally, run `npm run serve --port=[PORT]`, and then go to WeWeb
+editor, open developer popup and add `localhost:[PORT]` as custom element.
 
 ## Build
 
-Before release, you can check build errors by running `npm run build --name="ww-chat" --type="element"`
+Before release, you can check build errors by running
+`npm run build --name="ww-chat" --type="element"`
 
 ---
 
@@ -56,24 +60,26 @@ Messages passed to the component should follow this structure:
 
 Configure how the component reads your message data:
 
--   **Message ID**: `context.mapping['id']`
--   **Message Text**: `context.mapping['text']`
--   **Sender ID**: `context.mapping['senderId']`
--   **Timestamp**: `context.mapping['timestamp']`
--   **Attachments**: `context.mapping['attachments']` (optional)
+- **Message ID**: `context.mapping['id']`
+- **Message Text**: `context.mapping['text']`
+- **Sender ID**: `context.mapping['senderId']`
+- **Timestamp**: `context.mapping['timestamp']`
+- **Attachments**: `context.mapping['attachments']` (optional)
 
 ---
 
 ## 👥 Mentions System
 
-The component includes a fully-featured mentions system that allows users to mention other participants using the `@` symbol.
+The component includes a fully-featured mentions system that allows users to
+mention other participants using the `@` symbol.
 
 ### How Mentions Work
 
 1. **User types `@`** in the input → Mentions dropdown appears
 2. **User selects a participant** → `@Name` is inserted into the message
 3. **Message is sent** → The `mentions` array is included in the message data
-4. **Message is displayed** → Mentions are automatically highlighted with custom colors
+4. **Message is displayed** → Mentions are automatically highlighted with custom
+   colors
 
 ### Storing Mentions in Your Database
 
@@ -97,22 +103,22 @@ CREATE TABLE messages (
 
 ```json
 {
-    "id": "msg-123",
-    "text": "@John Doe hey, can you check this with @Jane Smith?",
-    "sender_id": "user-456",
-    "timestamp": "2025-10-06T10:30:00Z",
-    "mentions": [
-        {
-            "id": "user-789",
-            "name": "John Doe",
-            "avatar": "https://example.com/john.jpg"
-        },
-        {
-            "id": "user-012",
-            "name": "Jane Smith",
-            "avatar": "https://example.com/jane.jpg"
-        }
-    ]
+  "id": "msg-123",
+  "text": "@John Doe hey, can you check this with @Jane Smith?",
+  "sender_id": "user-456",
+  "timestamp": "2025-10-06T10:30:00Z",
+  "mentions": [
+    {
+      "id": "user-789",
+      "name": "John Doe",
+      "avatar": "https://example.com/john.jpg"
+    },
+    {
+      "id": "user-012",
+      "name": "Jane Smith",
+      "avatar": "https://example.com/jane.jpg"
+    }
+  ]
 }
 ```
 
@@ -148,26 +154,26 @@ CREATE TABLE message_mentions (
 
 // Save to database
 const { data, error } = await supabase
-    .from('messages')
-    .insert({
-        text: trigger.event.message.text,
-        sender_id: trigger.event.message.senderId,
-        timestamp: trigger.event.message.timestamp,
-        mentions: trigger.event.message.mentions || [], // Store mentions array
-    })
-    .select()
-    .single();
+  .from("messages")
+  .insert({
+    text: trigger.event.message.text,
+    sender_id: trigger.event.message.senderId,
+    timestamp: trigger.event.message.timestamp,
+    mentions: trigger.event.message.mentions || [], // Store mentions array
+  })
+  .select()
+  .single();
 
 // Optional: Send notifications to mentioned users
 if (trigger.event.message.mentions?.length > 0) {
-    await supabase.from('notifications').insert(
-        trigger.event.message.mentions.map(mention => ({
-            user_id: mention.id,
-            type: 'mention',
-            message_id: data.id,
-            sender_id: trigger.event.message.senderId,
-        }))
-    );
+  await supabase.from("notifications").insert(
+    trigger.event.message.mentions.map((mention) => ({
+      user_id: mention.id,
+      type: "mention",
+      message_id: data.id,
+      sender_id: trigger.event.message.senderId,
+    })),
+  );
 }
 ```
 
@@ -178,9 +184,9 @@ if (trigger.event.message.mentions?.length > 0) {
 ```javascript
 // Load messages from database
 const { data: messages } = await supabase
-    .from('messages')
-    .select(
-        `
+  .from("messages")
+  .select(
+    `
     id,
     text,
     sender_id,
@@ -190,19 +196,19 @@ const { data: messages } = await supabase
       name,
       avatar
     )
-  `
-    )
-    .eq('conversation_id', conversationId)
-    .order('timestamp', { ascending: true });
+  `,
+  )
+  .eq("conversation_id", conversationId)
+  .order("timestamp", { ascending: true });
 
 // Format for the chat component
-return messages.map(msg => ({
-    id: msg.id,
-    text: msg.text,
-    senderId: msg.sender_id,
-    userName: msg.sender.name,
-    timestamp: msg.timestamp,
-    mentions: msg.mentions, // Component uses this for highlighting!
+return messages.map((msg) => ({
+  id: msg.id,
+  text: msg.text,
+  senderId: msg.sender_id,
+  userName: msg.sender.name,
+  timestamp: msg.timestamp,
+  mentions: msg.mentions, // Component uses this for highlighting!
 }));
 ```
 
@@ -210,15 +216,15 @@ return messages.map(msg => ({
 
 In the WeWeb editor, customize mention appearance:
 
--   **Mentions Color**: Text color for highlighted mentions (default: `#3b82f6`)
--   **Mentions Background**: Background color for mentions (default: `#dbeafe`)
+- **Mentions Color**: Text color for highlighted mentions (default: `#3b82f6`)
+- **Mentions Background**: Background color for mentions (default: `#dbeafe`)
 
 The component automatically:
 
--   ✅ Finds mentions in the message text
--   ✅ Highlights them with your custom colors
--   ✅ Handles multiple mentions correctly
--   ✅ Works with adjacent mentions (e.g., `@John @Jane`)
+- ✅ Finds mentions in the message text
+- ✅ Highlights them with your custom colors
+- ✅ Handles multiple mentions correctly
+- ✅ Works with adjacent mentions (e.g., `@John @Jane`)
 
 ### Mentions Data Flow
 
@@ -267,29 +273,31 @@ const files = trigger.event.message.attachments;
 // Upload files to storage (e.g., Supabase Storage)
 const uploadedFiles = [];
 for (const file of files) {
-    const { data, error } = await supabase.storage
-        .from('chat-attachments')
-        .upload(`${conversationId}/${file.name}`, file);
+  const { data, error } = await supabase.storage
+    .from("chat-attachments")
+    .upload(`${conversationId}/${file.name}`, file);
 
-    if (!error) {
-        const url = supabase.storage.from('chat-attachments').getPublicUrl(data.path).data.publicUrl;
+  if (!error) {
+    const url =
+      supabase.storage.from("chat-attachments").getPublicUrl(data.path).data
+        .publicUrl;
 
-        uploadedFiles.push({
-            id: crypto.randomUUID(),
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            url: url,
-        });
-    }
+    uploadedFiles.push({
+      id: crypto.randomUUID(),
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      url: url,
+    });
+  }
 }
 
 // Save message with attachment URLs
-await supabase.from('messages').insert({
-    text: trigger.event.message.text,
-    sender_id: trigger.event.message.senderId,
-    timestamp: trigger.event.message.timestamp,
-    attachments: uploadedFiles,
+await supabase.from("messages").insert({
+  text: trigger.event.message.text,
+  sender_id: trigger.event.message.senderId,
+  timestamp: trigger.event.message.timestamp,
+  attachments: uploadedFiles,
 });
 ```
 
@@ -301,30 +309,30 @@ The component offers extensive styling options:
 
 ### Header
 
--   Background color, text color, border
--   Name and location font sizes
--   Close button styling
--   Group chat avatar color
+- Background color, text color, border
+- Name and location font sizes
+- Close button styling
+- Group chat avatar color
 
 ### Messages
 
--   Background colors for own/other messages
--   Text colors, font sizes, font weights
--   Border and border radius
--   Custom message bubbles
+- Background colors for own/other messages
+- Text colors, font sizes, font weights
+- Border and border radius
+- Custom message bubbles
 
 ### Input Area
 
--   Background color, text color
--   Border styles (normal, hover, focus)
--   Placeholder styling
--   Button colors and sizes
+- Background color, text color
+- Border styles (normal, hover, focus)
+- Placeholder styling
+- Button colors and sizes
 
 ### Icons
 
--   Send icon, attachment icon, remove icon
--   Customizable colors and sizes
--   Use any Lucide icon
+- Send icon, attachment icon, remove icon
+- Customizable colors and sizes
+- Use any Lucide icon
 
 ---
 
@@ -366,6 +374,43 @@ Triggered when a user clicks an attachment in a message.
 }
 ```
 
+### messageEdit
+
+Triggered when a user edits one of their messages.
+
+```javascript
+{
+  message: {
+    id: 'uuid-returned-by-your-backend',
+    text: 'Updated message text',
+    senderId: 'user-456',
+    userName: 'Alice',
+    timestamp: '2025-10-06T10:35:42Z',
+    attachments: [...],
+    mentions: [...],
+    _originalData: { ... } // Snapshot of the original message structure
+  }
+}
+```
+
+> ℹ️ The component momentarily disables editing for messages that are still
+> pending persistence. As soon as your backend returns the definitive message
+> (with the real UUID), the edit menu is automatically re-enabled.
+
+### messageDelete
+
+Triggered when a user requests to delete one of their messages.
+
+```javascript
+{
+  message: {
+    id: 'uuid-returned-by-your-backend',
+    text: 'Message slated for deletion',
+    senderId: 'user-456'
+  }
+}
+```
+
 ### messageRightClick
 
 Triggered when a user right-clicks a message.
@@ -392,29 +437,67 @@ Triggered when the user clicks the header close button.
 
 Configure date/time formatting:
 
--   **Locale**: Choose from 40+ locales (e.g., `enUS`, `fr`, `de`, `ja`)
--   **Time Format**: Customize using date-fns format patterns (e.g., `h:mm a`, `HH:mm`)
--   **Custom Text**: Set custom text for "Today", "Yesterday", "Just now"
+- **Locale**: Choose from 40+ locales (e.g., `enUS`, `fr`, `de`, `ja`)
+- **Time Format**: Customize using date-fns format patterns (e.g., `h:mm a`,
+  `HH:mm`)
+- **Custom Text**: Set custom text for "Today", "Yesterday", "Just now"
 
 ---
 
 ## 💡 Pro Tips
 
-1. **Always include the `mentions` array** in your database schema, even if empty
-2. **Don't extract mentions with regex** - use the array provided by the component
+1. **Always include the `mentions` array** in your database schema, even if
+   empty
+2. **Don't extract mentions with regex** - use the array provided by the
+   component
 3. **Index the mentions column** (GIN index in PostgreSQL) for fast queries
 4. **Send notifications** when users are mentioned
 5. **Keep mention names at time of mention** for historical accuracy
-6. **Use conversation-based queries** to load only relevant messages
-7. **Enable auto-scroll** for better UX in real-time chats
+6. **Respect pending edits** – the component exposes `pendingMessageIds`
+   internally so you can mirror the behaviour or wait for your backend to
+   confirm before allowing edits
+7. **Use conversation-based queries** to load only relevant messages
+8. **Expose & consume `chat-inputValue`** – workflows can react to the current
+   draft text before it resets after send
+9. **Enable auto-scroll** for better UX in real-time chats
+
+---
+
+## ✏️ Editing & Deleting Messages
+
+### How It Works
+
+- The message menu (⋮) appears on hover for your own messages.
+- Choose **Edit** to populate the input with the existing text and update the
+  message.
+- Choose **Delete** to trigger the `messageDelete` event; you decide whether to
+  remove it immediately or after a backend confirmation.
+
+### Pending Safety
+
+- When you send a brand new message, the component generates a temporary UUID so
+  the UI can render instantly.
+- Until your backend returns the persisted record (with the final ID), the
+  edit/delete controls stay disabled and the component keeps track of pending
+  IDs internally.
+- Once the message list refreshes with the real ID, the controls unlock and
+  future edits use the correct identifier.
+
+### Workflow Tips
+
+- Listen to `messageEdit` and `messageDelete` to update your database.
+- After persisting edits, reload your messages array so the component receives
+  the updated `_originalData`.
+- Use `chat-inputValue` (component variable) if you need the draft text while
+  the user edits.
 
 ---
 
 ## 📚 Additional Resources
 
--   [WeWeb Documentation](https://docs.weweb.io/)
--   [date-fns Format Patterns](https://date-fns.org/docs/format)
--   [Lucide Icons](https://lucide.dev/)
+- [WeWeb Documentation](https://docs.weweb.io/)
+- [date-fns Format Patterns](https://date-fns.org/docs/format)
+- [Lucide Icons](https://lucide.dev/)
 
 ---
 
