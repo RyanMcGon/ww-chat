@@ -758,8 +758,8 @@ export default {
 
     &__menu {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: 10px; /* add a bit more breathing room from the top edge */
+        right: 10px; /* add a bit more breathing room from the right edge */
         opacity: 0;
         transition: opacity 0.2s ease;
         z-index: 10;
@@ -858,6 +858,8 @@ export default {
 
     &__content {
         position: relative;
+        /* reserve space on the right so the icon never overlaps the text */
+        padding-right: 40px;
 
         &:hover .ww-message-item__menu {
             opacity: 1;
