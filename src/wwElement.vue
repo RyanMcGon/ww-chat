@@ -540,10 +540,19 @@ export default {
 
             // If editing a message, emit edit event instead
             if (editingMessage.value) {
+                // Use the snapshot which has the preserved ID
+                // The ID was resolved from _originalData at edit start, so it's always correct
                 const updatedMessage = {
-                    ...editingMessage.value,
+                    id: editingMessage.value.id, // Use the preserved ID from snapshot
                     text: newMessage.value.trim(),
+                    senderId: editingMessage.value.senderId,
+                    userName: editingMessage.value.userName,
                     timestamp: new Date().toISOString(),
+                    attachments: editingMessage.value.attachments,
+                    mentions: currentMentions.value.length > 0 ? currentMentions.value : editingMessage.value.mentions,
+                    userSettings: editingMessage.value.userSettings,
+                    // Include _originalData so workflows can access the original message structure
+                    _originalData: editingMessage.value._originalData,
                 };
 
                 editingMessage.value = null;
@@ -658,8 +667,88 @@ export default {
         const handleMessageEdit = (message) => {
             if (isEditing.value) return;
             
-            editingMessage.value = message;
-            setEditingMessageState(message);
+            // Get the original raw message data to preserve the ID
+            // This is critical - _originalData contains the source message from the messages array
+            const originalData = message._originalData || message;
+            
+            // Resolve the ID from the original data using the mapping formula
+            // This is the source of truth - we resolve from the raw data, not the processed message
+            let messageId = resolveMapping(originalData, props.content?.mappingMessageId, 'id');
+            
+            // If mapping formula resolution failed (returned empty/falsy), try fallbacks
+            if (!messageId) {
+                // First fallback: try direct property access on originalData
+                // Check common ID property names
+                messageId = originalData.id || originalData._id || originalData.message_id || originalData.messageId;
+            }
+            
+            // Second fallback: use the processed message's ID if we still don't have one
+            // The processed message ID was resolved when the message was first processed,
+            // so it should be valid even if our resolution above failed
+            if (!messageId) {
+                messageId = message.id;
+            }
+            
+            // Final fallback: generate a new ID (this should rarely happen)
+            // This indicates the message structure is unexpected or corrupted
+            if (!messageId) {
+                console.warn('ww-chat: Could not resolve message ID for edit, message may be missing ID field');
+                messageId = `msg-${wwLib.wwUtils.getUid()}`;
+            }
+            
+            // Store the resolved ID - this is what we'll use when emitting the edit event
+            // By resolving and storing it here, we ensure it doesn't change even if the
+            // messages array updates or the message object is re-processed
+            
+            // Deep clone the original data to prevent it from changing if the messages array updates
+            // This is critical - if _originalData is a reference and the array updates,
+            // the reference might point to a different object, breaking ID resolution
+            const cloneOriginalData = (data) => {
+                if (!data || typeof data !== 'object') return data;
+                try {
+                    // Use JSON parse/stringify for deep cloning (handles most cases)
+                    // This preserves the structure but breaks references
+                    return JSON.parse(JSON.stringify(data));
+                } catch (e) {
+                    // If JSON cloning fails (e.g., circular references), do a shallow clone
+                    return { ...data };
+                }
+            };
+            
+            // Create a snapshot of the message with the resolved ID
+            // This prevents ID changes if the messages array updates during editing
+            // Deep clone attachments and mentions to avoid reference issues
+            const cloneAttachments = (atts) => {
+                if (!atts || !Array.isArray(atts)) return [];
+                return atts.map(att => {
+                    if (att && typeof att === 'object') {
+                        // If it's a File object, preserve it (can't be cloned)
+                        if (att instanceof File || att.file instanceof File) {
+                            return att;
+                        }
+                        // Otherwise clone the object
+                        return { ...att };
+                    }
+                    return att;
+                });
+            };
+            
+            const messageSnapshot = {
+                id: messageId, // Preserved ID from original data - resolved at edit start
+                text: message.text || '',
+                senderId: message.senderId || '',
+                userName: message.userName || '',
+                timestamp: message.timestamp || '',
+                attachments: cloneAttachments(message.attachments),
+                mentions: message.mentions ? [...message.mentions] : [],
+                userSettings: message.userSettings ? { ...message.userSettings } : {},
+                // Deep clone the original data to preserve its structure even if the array updates
+                // This ensures ID resolution always works, even on subsequent edits
+                _originalData: cloneOriginalData(originalData),
+            };
+            
+            editingMessage.value = messageSnapshot;
+            setEditingMessageState(messageSnapshot);
             newMessage.value = message.text || '';
             
             // Scroll to input area
