@@ -41,7 +41,7 @@ const processRichText = (text, allowRichText = true) => {
     });
 
     // Protect strikethrough
-    result = result.replace(/~~([^~\n]+?)~~/g, (match, content) => {
+    result = result.replace(/~~([\s\S]+?)~~/g, (match, content) => {
         const placeholder = `__STRIKE_${strikeIndex}__`;
         strikeBlocks.push(`<s>${content}</s>`);
         strikeIndex++;

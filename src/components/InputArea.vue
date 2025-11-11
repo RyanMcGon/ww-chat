@@ -690,19 +690,37 @@ export default {
                     plainTextValue.value = inputValue.value;
                     nextTick(() => {
                         const textarea = textareaRef.value;
-                        const length = inputValue.value.length;
                         if (textarea) {
-                            textarea.setSelectionRange(length, length);
+                            const frontDoc = getFrontDocument();
+                            const isFocused = frontDoc?.activeElement === textarea;
+                            const caretPos = isFocused
+                                ? textarea.selectionEnd ?? inputValue.value.length
+                                : inputValue.value.length;
+                            if (!isFocused) {
+                                textarea.setSelectionRange(caretPos, caretPos);
+                            }
                             updateSelection();
                             adjustTextareaHeight();
+                            processMentionState(plainTextValue.value, caretPos);
+                        } else {
+                            processMentionState(plainTextValue.value, plainTextValue.value.length);
                         }
-                        processMentionState(plainTextValue.value, plainTextValue.value.length);
                     });
                 } else {
                     syncRichEditor();
                     nextTick(() => {
-                        setCaretOffsetInRich(plainTextValue.value.length);
-                        processMentionState(plainTextValue.value, plainTextValue.value.length);
+                        const richInput = richInputRef.value;
+                        if (richInput) {
+                            const frontDoc = getFrontDocument();
+                            const isFocused = frontDoc?.activeElement === richInput;
+                            const caretPos = isFocused ? getCaretOffsetFromRich() : plainTextValue.value.length;
+                            if (!isFocused) {
+                                setCaretOffsetInRich(plainTextValue.value.length);
+                            }
+                            processMentionState(plainTextValue.value, caretPos);
+                        } else {
+                            processMentionState(plainTextValue.value, plainTextValue.value.length);
+                        }
                     });
                 }
             }
