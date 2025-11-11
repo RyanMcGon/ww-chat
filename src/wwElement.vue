@@ -330,7 +330,7 @@ export default {
             return rawMessages.value.map(message => {
                 if (!message || typeof message !== 'object') {
                     return {
-                        id: `msg-${wwLib.wwUtils.getUid()}`,
+                        id: wwLib.wwUtils.getUid(), // Fallback: use UUID format without prefix
                         text: '',
                         senderId: '',
                         userName: '',
@@ -378,7 +378,7 @@ export default {
                 return {
                     id:
                         resolveMapping(message, props.content?.mappingMessageId, 'id') ||
-                        `msg-${wwLib.wwUtils.getUid()}`,
+                        wwLib.wwUtils.getUid(), // Fallback: use UUID format without prefix
                     text: resolveMapping(message, props.content?.mappingMessageText, 'text') || '',
                     senderId: senderId,
                     userName: displayUserName,
@@ -539,32 +539,53 @@ export default {
             if (isEditing.value || isDisabled.value || (!newMessage.value.trim() && pendingAttachments.value.length === 0)) return;
 
             // If editing a message, emit edit event instead
-            if (editingMessage.value) {
+            // Check editingMessage state to determine if we're editing or sending new
+            const isEditingMessage = editingMessage.value !== null && editingMessage.value !== undefined;
+            
+            if (isEditingMessage) {
                 // Use the snapshot which has the preserved ID
                 // The ID was resolved from _originalData at edit start, so it's always correct
-                const updatedMessage = {
-                    id: editingMessage.value.id, // Use the preserved ID from snapshot
-                    text: newMessage.value.trim(),
-                    senderId: editingMessage.value.senderId,
-                    userName: editingMessage.value.userName,
-                    timestamp: new Date().toISOString(),
-                    attachments: editingMessage.value.attachments,
-                    mentions: currentMentions.value.length > 0 ? currentMentions.value : editingMessage.value.mentions,
-                    userSettings: editingMessage.value.userSettings,
-                    // Include _originalData so workflows can access the original message structure
-                    _originalData: editingMessage.value._originalData,
-                };
+                const messageToEdit = editingMessage.value;
+                
+                // Defensive check: ensure we have a valid editing message
+                if (!messageToEdit || !messageToEdit.id) {
+                    console.warn('ww-chat: Editing message state is invalid, clearing and sending as new message');
+                    editingMessage.value = null;
+                    setEditingMessageState(null);
+                    // Fall through to send as new message
+                } else {
+                    const updatedMessage = {
+                        id: messageToEdit.id, // Use the preserved ID from snapshot
+                        text: newMessage.value.trim(),
+                        senderId: messageToEdit.senderId,
+                        userName: messageToEdit.userName,
+                        timestamp: new Date().toISOString(),
+                        attachments: messageToEdit.attachments,
+                        mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
+                        userSettings: messageToEdit.userSettings,
+                        // Include _originalData so workflows can access the original message structure
+                        _originalData: messageToEdit._originalData,
+                    };
 
+                    // Clear editing state BEFORE emitting event to prevent race conditions
+                    editingMessage.value = null;
+                    setEditingMessageState(null);
+                    newMessage.value = '';
+                    currentMentions.value = [];
+
+                    emit('trigger-event', {
+                        name: 'messageEdit',
+                        event: { message: updatedMessage },
+                    });
+                    return;
+                }
+            }
+            
+            // Ensure editing state is cleared when sending new messages
+            // This is a safety check in case editing state wasn't cleared properly
+            if (editingMessage.value) {
                 editingMessage.value = null;
                 setEditingMessageState(null);
-                newMessage.value = '';
-                currentMentions.value = [];
-
-                emit('trigger-event', {
-                    name: 'messageEdit',
-                    event: { message: updatedMessage },
-                });
-                return;
             }
 
             const attachments = [...pendingAttachments.value];
@@ -575,8 +596,12 @@ export default {
             // Clear local pending attachments right after snapshotting
             pendingAttachments.value = [];
 
+            // Generate a unique ID for the new message
+            // Use UUID format without prefix to match backend expectations
+            const messageId = wwLib.wwUtils.getUid();
+            
             const message = {
-                id: `msg-${wwLib.wwUtils.getUid()}`,
+                id: messageId,
                 text: newMessage.value.trim(),
                 senderId: currentUserId.value,
                 userName: currentUserParticipant.value?.name || 'You',
@@ -693,7 +718,7 @@ export default {
             // This indicates the message structure is unexpected or corrupted
             if (!messageId) {
                 console.warn('ww-chat: Could not resolve message ID for edit, message may be missing ID field');
-                messageId = `msg-${wwLib.wwUtils.getUid()}`;
+                messageId = wwLib.wwUtils.getUid(); // Use UUID format without prefix
             }
             
             // Store the resolved ID - this is what we'll use when emitting the edit event
@@ -780,7 +805,7 @@ export default {
             if (isEditing.value) return;
 
             const newMessageRaw = {
-                id: message.id || `msg-${wwLib.wwUtils.getUid()}`,
+                id: message.id || wwLib.wwUtils.getUid(), // Use UUID format without prefix
                 text: message.text || '',
                 senderId: message.senderId || '',
                 userName: message.userName || '',
