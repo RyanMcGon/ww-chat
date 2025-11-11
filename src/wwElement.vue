@@ -488,11 +488,12 @@ export default {
         // Sync newMessage with exposed inputValue variable
         // Use a flag to prevent circular updates
         const isUpdatingFromExternal = ref(false);
+        const skipInputValueSync = ref(false);
         
         watch(
             newMessage,
             (value) => {
-                if (!isUpdatingFromExternal.value) {
+                if (!isUpdatingFromExternal.value && !skipInputValueSync.value) {
                     const stringValue = value || '';
                     if (inputValue.value !== stringValue) {
                         setInputValue(stringValue);
@@ -571,8 +572,14 @@ export default {
                         event: { message: updatedMessage },
                     });
 
+                    skipInputValueSync.value = true;
                     newMessage.value = '';
                     currentMentions.value = [];
+
+                    setTimeout(() => {
+                        setInputValue('');
+                        skipInputValueSync.value = false;
+                    }, 150);
                     return;
                 }
             }
@@ -616,8 +623,14 @@ export default {
                 event: { message: messagePayload },
             });
 
+            skipInputValueSync.value = true;
             newMessage.value = '';
             currentMentions.value = [];
+
+            setTimeout(() => {
+                setInputValue('');
+                skipInputValueSync.value = false;
+            }, 150);
         };
 
         const handleAttachment = files => {
