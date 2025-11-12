@@ -101,7 +101,7 @@ const processRichText = (text, allowRichText = true) => {
             if (/^<\s*(ul|ol|li|div|p|table|blockquote|pre)/i.test(trimmed)) {
                 segments.push(trimmed);
             } else {
-                segments.push(`<p>${trimmed}</p>`);
+                segments.push(trimmed);
             }
         }
     });
