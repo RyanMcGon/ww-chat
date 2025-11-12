@@ -257,6 +257,28 @@ const convertHtmlToMarkdown = (html) => {
         return value.replace(/[\s\u200B\u00A0]+/g, '') !== '';
     };
 
+    const wrapTextWithMarkers = (text, markers = []) => {
+        if (!text) return '';
+        if (markers.length === 0) return text;
+
+        const segments = text.split(/(\n+)/);
+        return segments
+            .map(segment => {
+                if (!segment) return segment;
+                if (segment.startsWith('\n')) return segment;
+                if (!hasMeaningfulText(segment)) return segment;
+                return markers.reduce((acc, marker) => `${marker}${acc}${marker}`, segment);
+            })
+            .join('');
+    };
+
+    const ensureMarker = (markers, marker) => {
+        if (!marker) return;
+        if (!markers.includes(marker)) {
+            markers.push(marker);
+        }
+    };
+
     const walkNodes = (node) => {
         if (!node) return '';
 
@@ -278,6 +300,10 @@ const convertHtmlToMarkdown = (html) => {
             (/\bline-through\b/.test(style) ||
                 /text-decoration\s*:\s*[^;]*line-through/.test(style) ||
                 /text-decoration-line\s*:\s*[^;]*line-through/.test(style));
+        const markersFromStyle = [];
+        if (hasStrikeStyle) ensureMarker(markersFromStyle, '~~');
+        if (hasBoldStyle) ensureMarker(markersFromStyle, '**');
+        if (hasItalicStyle) ensureMarker(markersFromStyle, '*');
 
         if (node.classList?.contains('ww-message-item__mention')) {
             return node.textContent || '';
@@ -287,30 +313,30 @@ const convertHtmlToMarkdown = (html) => {
             case 'br':
                 return '\n';
             case 'strong':
-            case 'b':
-                return children ? `**${children}**` : '';
+            case 'b': {
+                const markers = [...markersFromStyle];
+                ensureMarker(markers, '**');
+                return wrapTextWithMarkers(children, markers);
+            }
             case 'em':
-            case 'i':
-                return children ? `*${children}*` : '';
+            case 'i': {
+                const markers = [...markersFromStyle];
+                ensureMarker(markers, '*');
+                return wrapTextWithMarkers(children, markers);
+            }
             case 'code':
                 return children ? `\`${children}\`` : '';
             case 's':
-            case 'strike':
-                return children ? `~~${children}~~` : '';
+            case 'strike': {
+                const markers = [...markersFromStyle];
+                ensureMarker(markers, '~~');
+                return wrapTextWithMarkers(children, markers);
+            }
             case 'span': {
                 if (!hasMeaningfulText(children)) {
                     return children;
                 }
-                if (hasStrikeStyle) {
-                    return children ? `~~${children}~~` : '';
-                }
-                if (hasBoldStyle) {
-                    return children ? `**${children}**` : '';
-                }
-                if (hasItalicStyle) {
-                    return children ? `*${children}*` : '';
-                }
-                return children;
+                return markersFromStyle.length > 0 ? wrapTextWithMarkers(children, markersFromStyle) : children;
             }
             case 'a': {
                 const href = node.getAttribute('href') || '';
@@ -327,16 +353,8 @@ const convertHtmlToMarkdown = (html) => {
             case 'p': {
                 const block = Array.from(node.childNodes).map(walkNodes).join('');
                 if (!block) return '';
-                if (hasMeaningfulText(block)) {
-                    if (hasStrikeStyle) {
-                        return `~~${block}~~\n`;
-                    }
-                    if (hasBoldStyle) {
-                        return `**${block}**\n`;
-                    }
-                    if (hasItalicStyle) {
-                        return `*${block}*\n`;
-                    }
+                if (hasMeaningfulText(block) && markersFromStyle.length > 0) {
+                    return `${wrapTextWithMarkers(block, markersFromStyle)}\n`;
                 }
                 return `${block}\n`;
             }
@@ -344,16 +362,9 @@ const convertHtmlToMarkdown = (html) => {
                 if (!hasMeaningfulText(children)) {
                     return Array.from(node.childNodes).map(walkNodes).join('');
                 }
-                if (hasStrikeStyle) {
-                    return children ? `~~${children}~~` : '';
-                }
-                if (hasBoldStyle) {
-                    return children ? `**${children}**` : '';
-                }
-                if (hasItalicStyle) {
-                    return children ? `*${children}*` : '';
-                }
-                return Array.from(node.childNodes).map(walkNodes).join('');
+                return markersFromStyle.length > 0
+                    ? wrapTextWithMarkers(children, markersFromStyle)
+                    : Array.from(node.childNodes).map(walkNodes).join('');
         }
     };
 
