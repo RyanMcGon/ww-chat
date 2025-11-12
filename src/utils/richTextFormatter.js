@@ -56,13 +56,13 @@ const processRichText = (text, allowRichText = true) => {
     // Process italic: *text* or _text_ (single markers)
     // Since bold (**text** and __text__) is already processed and replaced,
     // any remaining single * or _ markers should be italic
-    // Match single asterisk - content shouldn't contain *, newlines, or HTML entities
-    result = result.replace(/\*([^*\n&<>]+?)\*/g, '<em>$1</em>');
+    // Allow content to span multiple lines
+    result = result.replace(/\*([\s\S]+?)\*/g, '<em>$1</em>');
     
     // Match single underscore for italic
     // Use word boundary to avoid matching in the middle of words like "test_text"
     // But also allow matching when not at word boundaries for cases like "text_text"
-    result = result.replace(/([^_a-zA-Z0-9]|^)_([^_\n&<>]+?)_([^_a-zA-Z0-9]|$)/g, '$1<em>$2</em>$3');
+    result = result.replace(/([^_a-zA-Z0-9]|^)_([\s\S]+?)_([^_a-zA-Z0-9]|$)/g, '$1<em>$2</em>$3');
 
     // Process links: [text](url)
     result = result.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');

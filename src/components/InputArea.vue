@@ -264,23 +264,6 @@ const convertHtmlToMarkdown = (html) => {
         return MARKER_ORDER.filter(marker => set.has(marker));
     };
 
-    const wrapTextWithMarkers = (text, markers = []) => {
-        if (!text) return '';
-        if (markers.length === 0) return text;
-
-        const sortedMarkers = mergeMarkers([], markers);
-        const segments = text.split(/(\r?\n+)/);
-
-        return segments
-            .map(segment => {
-                if (!segment) return segment;
-                if (/^\r?\n+$/.test(segment)) return segment;
-                if (!hasMeaningfulText(segment)) return segment;
-                return sortedMarkers.reduce((acc, marker) => `${marker}${acc}${marker}`, segment);
-            })
-            .join('');
-    };
-
     const getMarkersFromNode = (node) => {
         if (!node || node.nodeType !== Node.ELEMENT_NODE) return [];
 
@@ -307,11 +290,16 @@ const convertHtmlToMarkdown = (html) => {
         return MARKER_ORDER.filter(marker => markers.includes(marker));
     };
 
+    const wrapWithMarkers = (text, markers = []) => {
+        if (!text || markers.length === 0) return text;
+        return markers.reduce((acc, marker) => `${marker}${acc}${marker}`, text);
+    };
+
     const walkNodes = (node, activeMarkers = []) => {
         if (!node) return '';
 
         if (node.nodeType === Node.TEXT_NODE) {
-            return wrapTextWithMarkers(node.nodeValue || '', activeMarkers);
+            return node.nodeValue || '';
         }
 
         if (node.nodeType !== Node.ELEMENT_NODE) {
@@ -323,7 +311,8 @@ const convertHtmlToMarkdown = (html) => {
         }
 
         const tag = node.tagName.toLowerCase();
-        const nodeMarkers = mergeMarkers(activeMarkers, getMarkersFromNode(node));
+        const nodeMarkers = getMarkersFromNode(node);
+        const combinedMarkers = mergeMarkers(activeMarkers, nodeMarkers);
 
         switch (tag) {
             case 'br':
@@ -337,13 +326,13 @@ const convertHtmlToMarkdown = (html) => {
             case 'a': {
                 const href = node.getAttribute('href') || '';
                 const label = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, nodeMarkers))
+                    .map(child => walkNodes(child, combinedMarkers))
                     .join('') || href;
                 return href ? `[${label}](${href})` : label;
             }
             case 'li': {
                 const liContent = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, nodeMarkers))
+                    .map(child => walkNodes(child, combinedMarkers))
                     .join('')
                     .trim();
                 return liContent ? `- ${liContent}\n` : '';
@@ -353,15 +342,26 @@ const convertHtmlToMarkdown = (html) => {
             case 'div':
             case 'p': {
                 const block = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, nodeMarkers))
+                    .map(child => walkNodes(child, combinedMarkers))
                     .join('');
-                return block ? `${block}\n` : '';
+                if (!block) return '';
+
+                const newMarkers = nodeMarkers.filter(marker => !activeMarkers.includes(marker));
+                const wrapped = hasMeaningfulText(block) ? wrapWithMarkers(block, newMarkers) : block;
+                return `${wrapped}\n`;
             }
-            case 'span':
-            default:
-                return Array.from(node.childNodes)
-                    .map(child => walkNodes(child, nodeMarkers))
+            default: {
+                const content = Array.from(node.childNodes)
+                    .map(child => walkNodes(child, combinedMarkers))
                     .join('');
+
+                if (!hasMeaningfulText(content)) {
+                    return content;
+                }
+
+                const newMarkers = nodeMarkers.filter(marker => !activeMarkers.includes(marker));
+                return wrapWithMarkers(content, newMarkers);
+            }
         }
     };
 
