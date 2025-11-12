@@ -99,16 +99,6 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
-                        @click="applyFormat('code')"
-                        title="Inline code"
-                    >
-                        <span class="ww-chat-input-area__toolbar-code">{ }</span>
-                    </button>
-                    <button
-                        type="button"
-                        class="ww-chat-input-area__toolbar-btn"
-                        :disabled="isUiDisabled"
-                        @mousedown.prevent
                         @click="applyFormat('strike')"
                         title="Strikethrough"
                     >
@@ -321,12 +311,6 @@ const convertHtmlToMarkdown = (html) => {
         switch (tag) {
             case 'br':
                 return '\n';
-            case 'code': {
-                const codeContent = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, []))
-                    .join('');
-                return codeContent ? `\`${codeContent}\`` : '';
-            }
             case 'a': {
                 const href = node.getAttribute('href') || '';
                 const label = Array.from(node.childNodes)
@@ -1177,21 +1161,6 @@ export default {
                 if (url) {
                     executed = doc.execCommand('createLink', false, url);
                 }
-            } else if (format === 'code') {
-                const selection = win.getSelection();
-                if (selection && selection.rangeCount > 0) {
-                    const range = selection.getRangeAt(0);
-                    const codeEl = doc.createElement('code');
-                    try {
-                        range.surroundContents(codeEl);
-                    } catch (_) {
-                        const content = range.cloneContents();
-                        codeEl.appendChild(content);
-                        range.deleteContents();
-                        range.insertNode(codeEl);
-                    }
-                    executed = true;
-                }
             }
 
             if (executed) {
@@ -1218,10 +1187,6 @@ export default {
             }
             if (format === 'italic') {
                 insertFormatting('*', '*', 'italic text');
-                return;
-            }
-            if (format === 'code') {
-                insertFormatting('`', '`', 'code');
                 return;
             }
             if (format === 'strike') {
