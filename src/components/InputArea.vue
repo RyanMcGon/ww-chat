@@ -252,123 +252,122 @@ const convertHtmlToMarkdown = (html) => {
     const doc = document.createElement('div');
     doc.innerHTML = html || '';
 
+    const MARKER_ORDER = ['~~', '**', '*'];
+
     const hasMeaningfulText = (value) => {
         if (value == null) return false;
         return value.replace(/[\s\u200B\u00A0]+/g, '') !== '';
+    };
+
+    const mergeMarkers = (base = [], additions = []) => {
+        const set = new Set([...base, ...additions]);
+        return MARKER_ORDER.filter(marker => set.has(marker));
     };
 
     const wrapTextWithMarkers = (text, markers = []) => {
         if (!text) return '';
         if (markers.length === 0) return text;
 
-        const segments = text.split(/(\n+)/);
+        const sortedMarkers = mergeMarkers([], markers);
+        const segments = text.split(/(\r?\n+)/);
+
         return segments
             .map(segment => {
                 if (!segment) return segment;
-                if (segment.startsWith('\n')) return segment;
+                if (/^\r?\n+$/.test(segment)) return segment;
                 if (!hasMeaningfulText(segment)) return segment;
-                return markers.reduce((acc, marker) => `${marker}${acc}${marker}`, segment);
+                return sortedMarkers.reduce((acc, marker) => `${marker}${acc}${marker}`, segment);
             })
             .join('');
     };
 
-    const ensureMarker = (markers, marker) => {
-        if (!marker) return;
-        if (!markers.includes(marker)) {
-            markers.push(marker);
+    const getMarkersFromNode = (node) => {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return [];
+
+        const markers = [];
+        const tag = node.tagName.toLowerCase();
+
+        if (tag === 'strong' || tag === 'b') markers.push('**');
+        if (tag === 'em' || tag === 'i') markers.push('*');
+        if (tag === 's' || tag === 'strike') markers.push('~~');
+
+        const style = (node.getAttribute && (node.getAttribute('style') || '')).toLowerCase();
+        if (style) {
+            if (/\bline-through\b/.test(style) || /text-decoration(?:-line)?\s*:\s*[^;]*line-through/.test(style)) {
+                markers.push('~~');
+            }
+            if (/font-weight\s*:\s*(bold|[5-9]00)/.test(style)) {
+                markers.push('**');
+            }
+            if (/font-style\s*:\s*italic/.test(style)) {
+                markers.push('*');
+            }
         }
+
+        return MARKER_ORDER.filter(marker => markers.includes(marker));
     };
 
-    const walkNodes = (node) => {
+    const walkNodes = (node, activeMarkers = []) => {
         if (!node) return '';
 
         if (node.nodeType === Node.TEXT_NODE) {
-            return node.nodeValue || '';
+            return wrapTextWithMarkers(node.nodeValue || '', activeMarkers);
         }
 
         if (node.nodeType !== Node.ELEMENT_NODE) {
             return '';
         }
 
-        const tag = node.tagName.toLowerCase();
-        const children = Array.from(node.childNodes).map(walkNodes).join('');
-        const style = (node.getAttribute && (node.getAttribute('style') || '')).toLowerCase();
-        const hasItalicStyle = !!style && /font-style\s*:\s*italic/.test(style);
-        const hasBoldStyle = !!style && /font-weight\s*:\s*(bold|[5-9]00)/.test(style);
-        const hasStrikeStyle =
-            !!style &&
-            (/\bline-through\b/.test(style) ||
-                /text-decoration\s*:\s*[^;]*line-through/.test(style) ||
-                /text-decoration-line\s*:\s*[^;]*line-through/.test(style));
-        const markersFromStyle = [];
-        if (hasStrikeStyle) ensureMarker(markersFromStyle, '~~');
-        if (hasBoldStyle) ensureMarker(markersFromStyle, '**');
-        if (hasItalicStyle) ensureMarker(markersFromStyle, '*');
-
         if (node.classList?.contains('ww-message-item__mention')) {
             return node.textContent || '';
         }
 
+        const tag = node.tagName.toLowerCase();
+        const nodeMarkers = mergeMarkers(activeMarkers, getMarkersFromNode(node));
+
         switch (tag) {
             case 'br':
                 return '\n';
-            case 'strong':
-            case 'b': {
-                const markers = [...markersFromStyle];
-                ensureMarker(markers, '**');
-                return wrapTextWithMarkers(children, markers);
-            }
-            case 'em':
-            case 'i': {
-                const markers = [...markersFromStyle];
-                ensureMarker(markers, '*');
-                return wrapTextWithMarkers(children, markers);
-            }
-            case 'code':
-                return children ? `\`${children}\`` : '';
-            case 's':
-            case 'strike': {
-                const markers = [...markersFromStyle];
-                ensureMarker(markers, '~~');
-                return wrapTextWithMarkers(children, markers);
-            }
-            case 'span': {
-                if (!hasMeaningfulText(children)) {
-                    return children;
-                }
-                return markersFromStyle.length > 0 ? wrapTextWithMarkers(children, markersFromStyle) : children;
+            case 'code': {
+                const codeContent = Array.from(node.childNodes)
+                    .map(child => walkNodes(child, []))
+                    .join('');
+                return codeContent ? `\`${codeContent}\`` : '';
             }
             case 'a': {
                 const href = node.getAttribute('href') || '';
-                const label = children || href;
+                const label = Array.from(node.childNodes)
+                    .map(child => walkNodes(child, nodeMarkers))
+                    .join('') || href;
                 return href ? `[${label}](${href})` : label;
             }
             case 'li': {
-                const liContent = children.trim();
+                const liContent = Array.from(node.childNodes)
+                    .map(child => walkNodes(child, nodeMarkers))
+                    .join('')
+                    .trim();
                 return liContent ? `- ${liContent}\n` : '';
             }
             case 'ul':
             case 'ol':
             case 'div':
             case 'p': {
-                const block = Array.from(node.childNodes).map(walkNodes).join('');
-                if (!block) return '';
-                if (hasMeaningfulText(block) && markersFromStyle.length > 0) {
-                    return `${wrapTextWithMarkers(block, markersFromStyle)}\n`;
-                }
-                return `${block}\n`;
+                const block = Array.from(node.childNodes)
+                    .map(child => walkNodes(child, nodeMarkers))
+                    .join('');
+                return block ? `${block}\n` : '';
             }
+            case 'span':
             default:
-                if (!hasMeaningfulText(children)) {
-                    return Array.from(node.childNodes).map(walkNodes).join('');
-                }
-                return markersFromStyle.length > 0
-                    ? wrapTextWithMarkers(children, markersFromStyle)
-                    : Array.from(node.childNodes).map(walkNodes).join('');
+                return Array.from(node.childNodes)
+                    .map(child => walkNodes(child, nodeMarkers))
+                    .join('');
         }
     };
 
-    const markdown = Array.from(doc.childNodes).map(walkNodes).join('');
+    const markdown = Array.from(doc.childNodes)
+        .map(child => walkNodes(child, []))
+        .join('');
     const plainText = doc.textContent || '';
 
     return {
@@ -1836,7 +1835,8 @@ export default {
             font-size: 0.85em;
         }
 
-        :deep(s) {
+        :deep(s),
+        :deep(strike) {
             text-decoration: line-through;
         }
 

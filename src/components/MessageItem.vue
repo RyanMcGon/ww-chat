@@ -612,7 +612,8 @@ export default {
             background-color: rgba(255, 255, 255, 0.2);
         }
 
-        :deep(s) {
+        :deep(s),
+        :deep(strike) {
             text-decoration: line-through;
             opacity: 0.7;
         }
