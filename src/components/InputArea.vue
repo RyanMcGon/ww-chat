@@ -1525,7 +1525,7 @@ export default {
         margin-bottom: 4px;
         max-height: 120px;
         /* Hide scrollbar by default; show when focused for multiline */
-        overflow-y: hidden;
+        overflow-y: auto;
         padding: 6px;
         border-radius: 12px;
         background-color: rgba(0, 0, 0, 0.02);
@@ -1753,11 +1753,6 @@ export default {
 
         &:not(.ww-chat-input-area__rich-input--disabled) {
             min-height: calc(var(--rich-input-min-height, 38px));
-        }
-
-        &:hover,
-        &:focus {
-            overflow-y: auto;
         }
 
         &:hover {

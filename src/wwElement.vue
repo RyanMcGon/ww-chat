@@ -23,104 +23,104 @@
             @close="handleClose"
         />
 
-        <!-- Messages Area -->
-        <div ref="messagesContainer" class="ww-chat__messages" :style="messagesContainerStyles">
-            <MessageList
-                :messages="messages"
+        <div class="ww-chat__body">
+            <div ref="messagesContainer" class="ww-chat__messages" :style="messagesContainerStyles">
+                <MessageList
+                    :messages="messages"
+                    :current-user-id="currentUserId"
+                    :message-bg-color="messageBgColor"
+                    :message-text-color="messageTextColor"
+                    :message-font-size="messageFontSize"
+                    :message-font-weight="messageFontWeight"
+                    :message-font-family="messageFontFamily"
+                    :message-border="messageBorder"
+                    :message-radius="messageRadius"
+                    :own-message-bg-color="ownMessageBgColor"
+                    :own-message-text-color="ownMessageTextColor"
+                    :own-message-font-size="ownMessageFontSize"
+                    :own-message-font-weight="ownMessageFontWeight"
+                    :own-message-font-family="ownMessageFontFamily"
+                    :own-message-border="ownMessageBorder"
+                    :own-message-radius="ownMessageRadius"
+                    :empty-message-text="emptyMessageText"
+                    :empty-message-color="emptyMessageColor"
+                    :date-separator-text-color="dateSeparatorTextColor"
+                    :date-separator-line-color="dateSeparatorLineColor"
+                    :date-separator-bg-color="dateSeparatorBgColor"
+                    :date-separator-border-radius="dateSeparatorBorderRadius"
+                    :mentions-color="mentionsColor"
+                    :mentions-bg-color="mentionsBgColor"
+                    :menu-icon="menuIcon"
+                    :menu-icon-color="menuIconColor"
+                    :menu-icon-size="menuIconSize"
+                    :edit-icon="editIcon"
+                    :edit-icon-color="editIconColor"
+                    :edit-icon-size="editIconSize"
+                    :delete-icon="deleteIcon"
+                    :delete-icon-color="deleteIconColor"
+                    :delete-icon-size="deleteIconSize"
+                    :allow-rich-text="allowRichText"
+                    :pending-message-ids="pendingLocalMessageIdsArray"
+                    @attachment-click="handleAttachmentClick"
+                    @message-right-click="handleMessageRightClick"
+                    @message-edit="handleMessageEdit"
+                    @message-delete="handleMessageDelete"
+                />
+            </div>
+
+            <InputArea
+                v-model="newMessage"
+                :is-disabled="isDisabled"
+                :allow-attachments="allowAttachments"
+                :pending-attachments="pendingAttachments"
+                :participants="participants"
                 :current-user-id="currentUserId"
-                :message-bg-color="messageBgColor"
-                :message-text-color="messageTextColor"
-                :message-font-size="messageFontSize"
-                :message-font-weight="messageFontWeight"
-                :message-font-family="messageFontFamily"
-                :message-border="messageBorder"
-                :message-radius="messageRadius"
-                :own-message-bg-color="ownMessageBgColor"
-                :own-message-text-color="ownMessageTextColor"
-                :own-message-font-size="ownMessageFontSize"
-                :own-message-font-weight="ownMessageFontWeight"
-                :own-message-font-family="ownMessageFontFamily"
-                :own-message-border="ownMessageBorder"
-                :own-message-radius="ownMessageRadius"
-                :empty-message-text="emptyMessageText"
-                :empty-message-color="emptyMessageColor"
-                :date-separator-text-color="dateSeparatorTextColor"
-                :date-separator-line-color="dateSeparatorLineColor"
-                :date-separator-bg-color="dateSeparatorBgColor"
-                :date-separator-border-radius="dateSeparatorBorderRadius"
+                :input-bg-color="inputBgColor"
+                :input-text-color="inputTextColor"
+                :input-font-size="inputFontSize"
+                :input-font-weight="inputFontWeight"
+                :input-font-family="inputFontFamily"
+                :input-placeholder-color="inputPlaceholderColor"
+                :input-area-border="inputAreaBorder"
+                :textarea-border="textareaBorder"
+                :textarea-border-hover="textareaBorderHover"
+                :textarea-border-focus="textareaBorderFocus"
+                :input-height="inputHeight"
+                :input-border-radius="inputBorderRadius"
+                :placeholder="inputPlaceholder"
+                :action-align="actionAlign"
+                :send-icon="sendIcon"
+                :send-icon-color="sendIconColor"
+                :send-icon-size="sendIconSize"
+                :attachment-icon="attachmentIcon"
+                :attachment-icon-color="attachmentIconColor"
+                :attachment-icon-size="attachmentIconSize"
+                :remove-icon="removeIcon"
+                :remove-icon-color="removeIconColor"
+                :remove-icon-size="removeIconSize"
                 :mentions-color="mentionsColor"
                 :mentions-bg-color="mentionsBgColor"
-                :menu-icon="menuIcon"
-                :menu-icon-color="menuIconColor"
-                :menu-icon-size="menuIconSize"
-                :edit-icon="editIcon"
-                :edit-icon-color="editIconColor"
-                :edit-icon-size="editIconSize"
-                :delete-icon="deleteIcon"
-                :delete-icon-color="deleteIconColor"
-                :delete-icon-size="deleteIconSize"
+                :send-button-bg-color="sendButtonBgColor"
+                :send-button-hover-bg-color="sendButtonHoverBgColor"
+                :send-button-border="sendButtonBorder"
+                :send-button-border-radius="sendButtonBorderRadius"
+                :send-button-size="sendButtonSize"
+                :send-button-box-shadow="sendButtonBoxShadow"
+                :attachment-button-bg-color="attachmentButtonBgColor"
+                :attachment-button-hover-bg-color="attachmentButtonHoverBgColor"
+                :attachment-button-border="attachmentButtonBorder"
+                :attachment-button-border-radius="attachmentButtonBorderRadius"
+                :attachment-button-size="attachmentButtonSize"
+                :attachment-button-box-shadow="attachmentButtonBoxShadow"
+                :editing-message="editingMessage"
                 :allow-rich-text="allowRichText"
-                :pending-message-ids="pendingLocalMessageIdsArray"
-                @attachment-click="handleAttachmentClick"
-                @message-right-click="handleMessageRightClick"
-                @message-edit="handleMessageEdit"
-                @message-delete="handleMessageDelete"
+                @send="sendMessage"
+                @attachment="handleAttachment"
+                @remove-attachment="handleRemoveAttachment"
+                @pending-attachment-click="handlePendingAttachmentClick"
+                @cancel-edit="handleCancelEdit"
             />
         </div>
-
-        <!-- Input Area -->
-        <InputArea
-            v-model="newMessage"
-            :is-disabled="isDisabled"
-            :allow-attachments="allowAttachments"
-            :pending-attachments="pendingAttachments"
-            :participants="participants"
-            :current-user-id="currentUserId"
-            :input-bg-color="inputBgColor"
-            :input-text-color="inputTextColor"
-            :input-font-size="inputFontSize"
-            :input-font-weight="inputFontWeight"
-            :input-font-family="inputFontFamily"
-            :input-placeholder-color="inputPlaceholderColor"
-            :input-area-border="inputAreaBorder"
-            :textarea-border="textareaBorder"
-            :textarea-border-hover="textareaBorderHover"
-            :textarea-border-focus="textareaBorderFocus"
-            :input-height="inputHeight"
-            :input-border-radius="inputBorderRadius"
-            :placeholder="inputPlaceholder"
-            :action-align="actionAlign"
-            :send-icon="sendIcon"
-            :send-icon-color="sendIconColor"
-            :send-icon-size="sendIconSize"
-            :attachment-icon="attachmentIcon"
-            :attachment-icon-color="attachmentIconColor"
-            :attachment-icon-size="attachmentIconSize"
-            :remove-icon="removeIcon"
-            :remove-icon-color="removeIconColor"
-            :remove-icon-size="removeIconSize"
-            :mentions-color="mentionsColor"
-            :mentions-bg-color="mentionsBgColor"
-            :send-button-bg-color="sendButtonBgColor"
-            :send-button-hover-bg-color="sendButtonHoverBgColor"
-            :send-button-border="sendButtonBorder"
-            :send-button-border-radius="sendButtonBorderRadius"
-            :send-button-size="sendButtonSize"
-            :send-button-box-shadow="sendButtonBoxShadow"
-            :attachment-button-bg-color="attachmentButtonBgColor"
-            :attachment-button-hover-bg-color="attachmentButtonHoverBgColor"
-            :attachment-button-border="attachmentButtonBorder"
-            :attachment-button-border-radius="attachmentButtonBorderRadius"
-            :attachment-button-size="attachmentButtonSize"
-            :attachment-button-box-shadow="attachmentButtonBoxShadow"
-            :editing-message="editingMessage"
-            :allow-rich-text="allowRichText"
-            @send="sendMessage"
-            @attachment="handleAttachment"
-            @remove-attachment="handleRemoveAttachment"
-            @pending-attachment-click="handlePendingAttachmentClick"
-            @cancel-edit="handleCancelEdit"
-        />
     </div>
 </template>
 
@@ -423,9 +423,26 @@ export default {
         const currentUserParticipant = computed(() => participants.value.find(p => p.isCurrentUser));
 
         // Style properties
-        const containerStyles = computed(() => ({
-            fontFamily: props.content?.fontFamily || 'inherit',
-        }));
+        const containerStyles = computed(() => {
+            const styles = {
+                fontFamily: props.content?.fontFamily || 'inherit',
+            };
+
+            const explicitHeight = props.content?.chatHeight ?? props.content?.height;
+            if (explicitHeight) {
+                styles.height = explicitHeight;
+            }
+
+            if (props.content?.chatMinHeight ?? props.content?.minHeight) {
+                styles.minHeight = props.content?.chatMinHeight ?? props.content?.minHeight;
+            }
+
+            if (props.content?.chatMaxHeight ?? props.content?.maxHeight) {
+                styles.maxHeight = props.content?.chatMaxHeight ?? props.content?.maxHeight;
+            }
+
+            return styles;
+        });
 
         const messagesAreaPadding = computed(() => props.content?.messagesAreaPadding || '16px');
 
@@ -1484,6 +1501,14 @@ export default {
         flex-shrink: 0;
         z-index: 2;
     }
+
+    &__body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
     &__messages {
         flex: 1;
         min-height: 0;
