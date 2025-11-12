@@ -99,7 +99,7 @@ const processRichText = (text, allowRichText = true) => {
     flushList();
 
     result = segments.join('\n');
-    result = result.replace(/<\/ul>\n\s*\n/g, '</ul><br />\n');
+    result = result.replace(/<\/ul>\n\s*\n/g, '</ul><br />');
 
     return result;
 };
