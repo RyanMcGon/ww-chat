@@ -480,6 +480,7 @@ export default {
         const removeIconText = ref(null);
         const selectionRange = ref({ start: 0, end: 0 });
         const isSyncingRich = ref(false);
+        const savedRichRange = ref(null);
 
         const richSizingStyle = computed(() => ({
             '--rich-input-min-height': props.inputHeight || '38px',
@@ -511,6 +512,71 @@ export default {
             }
         };
 
+        const captureCurrentRichRange = () => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            const frontWindow = getFrontWindow();
+            const selection = frontWindow.getSelection?.();
+            if (selection && selection.rangeCount > 0) {
+                try {
+                    savedRichRange.value = selection.getRangeAt(0).cloneRange();
+                } catch (error) {
+                    savedRichRange.value = null;
+                }
+            }
+        };
+
+        const restoreSavedRichRange = () => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            const frontWindow = getFrontWindow();
+            const selection = frontWindow.getSelection?.();
+            if (!selection) return;
+
+            selection.removeAllRanges();
+
+            if (savedRichRange.value) {
+                try {
+                    selection.addRange(savedRichRange.value.cloneRange());
+                    return;
+                } catch (error) {
+                    savedRichRange.value = null;
+                }
+            }
+
+            const doc = getFrontDocument();
+            const fallbackRange = doc.createRange();
+            fallbackRange.selectNodeContents(richInputRef.value);
+            fallbackRange.collapse(false);
+            selection.addRange(fallbackRange);
+            savedRichRange.value = fallbackRange.cloneRange();
+        };
+
+        const applyManualInlineFormat = (tagName) => {
+            if (!props.allowRichText || !richInputRef.value) return false;
+
+            const doc = getFrontDocument();
+            const frontWindow = getFrontWindow();
+            const selection = frontWindow.getSelection?.();
+            if (!selection || selection.rangeCount === 0) return false;
+
+            const range = selection.getRangeAt(0);
+            if (!range || !richInputRef.value.contains(range.commonAncestorContainer) || range.collapsed) {
+                return false;
+            }
+
+            const wrapper = doc.createElement(tagName);
+            const content = range.extractContents();
+            wrapper.appendChild(content);
+            range.insertNode(wrapper);
+
+            const newRange = doc.createRange();
+            newRange.selectNodeContents(wrapper);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            captureCurrentRichRange();
+            return true;
+        };
+
         const updateSelection = () => {
             if (textareaRef.value) {
                 selectionRange.value = {
@@ -526,6 +592,7 @@ export default {
             const selection = frontWindow.getSelection();
             if (!selection || selection.rangeCount === 0) return;
             const range = selection.getRangeAt(0);
+            captureCurrentRichRange();
             const preRange = range.cloneRange();
             preRange.selectNodeContents(richInputRef.value);
             preRange.setEnd(range.endContainer, range.endOffset);
@@ -879,6 +946,7 @@ export default {
             inputValue.value = markdown;
             plainTextValue.value = plainText;
             processMentionState(plainText, caret);
+            captureCurrentRichRange();
         };
 
         const handleRichKeyDown = (event) => {
@@ -943,6 +1011,7 @@ export default {
             range.collapse(true);
             selection.removeAllRanges();
             selection.addRange(range);
+            captureCurrentRichRange();
         };
 
         const processMentionState = (text, cursorPos) => {
@@ -1010,21 +1079,39 @@ export default {
             if (!props.allowRichText || !richInputRef.value) return;
             const doc = getFrontDocument();
             const win = getFrontWindow();
+
             focusTextarea();
+            restoreSavedRichRange();
+
+            let executed = false;
 
             if (format === 'bold') {
-                doc.execCommand('bold');
+                const before = richInputRef.value.innerHTML;
+                executed = doc.execCommand('bold');
+                if (!executed || richInputRef.value.innerHTML === before) {
+                    executed = applyManualInlineFormat('strong');
+                }
             } else if (format === 'italic') {
-                doc.execCommand('italic');
+                const before = richInputRef.value.innerHTML;
+                const result = doc.execCommand('italic');
+                executed = result;
+                if (!result || richInputRef.value.innerHTML === before) {
+                    executed = applyManualInlineFormat('em') || executed;
+                }
             } else if (format === 'strike') {
-                doc.execCommand('strikeThrough');
+                const before = richInputRef.value.innerHTML;
+                const result = doc.execCommand('strikeThrough');
+                executed = result;
+                if (!result || richInputRef.value.innerHTML === before) {
+                    executed = applyManualInlineFormat('s') || executed;
+                }
             } else if (format === 'bullet') {
-                doc.execCommand('insertUnorderedList');
+                executed = doc.execCommand('insertUnorderedList');
             } else if (format === 'link') {
                 const promptFn = win?.prompt ? win.prompt.bind(win) : undefined;
                 const url = promptFn ? promptFn('Enter URL', 'https://') : undefined;
                 if (url) {
-                    doc.execCommand('createLink', false, url);
+                    executed = doc.execCommand('createLink', false, url);
                 }
             } else if (format === 'code') {
                 const selection = win.getSelection();
@@ -1039,7 +1126,12 @@ export default {
                         range.deleteContents();
                         range.insertNode(codeEl);
                     }
+                    executed = true;
                 }
+            }
+
+            if (executed) {
+                captureCurrentRichRange();
             }
 
             handleRichInput();
