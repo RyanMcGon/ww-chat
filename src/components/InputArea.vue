@@ -265,6 +265,14 @@ const convertHtmlToMarkdown = (html) => {
 
         const tag = node.tagName.toLowerCase();
         const children = Array.from(node.childNodes).map(walkNodes).join('');
+        const style = (node.getAttribute && (node.getAttribute('style') || '')).toLowerCase();
+        const hasItalicStyle = !!style && /font-style\s*:\s*italic/.test(style);
+        const hasBoldStyle = !!style && /font-weight\s*:\s*(bold|[5-9]00)/.test(style);
+        const hasStrikeStyle =
+            !!style &&
+            (/\bline-through\b/.test(style) ||
+                /text-decoration\s*:\s*[^;]*line-through/.test(style) ||
+                /text-decoration-line\s*:\s*[^;]*line-through/.test(style));
 
         if (node.classList?.contains('ww-message-item__mention')) {
             return node.textContent || '';
@@ -284,6 +292,18 @@ const convertHtmlToMarkdown = (html) => {
             case 's':
             case 'strike':
                 return children ? `~~${children}~~` : '';
+            case 'span': {
+                if (hasStrikeStyle) {
+                    return children ? `~~${children}~~` : '';
+                }
+                if (hasBoldStyle) {
+                    return children ? `**${children}**` : '';
+                }
+                if (hasItalicStyle) {
+                    return children ? `*${children}*` : '';
+                }
+                return children;
+            }
             case 'a': {
                 const href = node.getAttribute('href') || '';
                 const label = children || href;
@@ -300,9 +320,16 @@ const convertHtmlToMarkdown = (html) => {
                 const block = Array.from(node.childNodes).map(walkNodes).join('');
                 return block ? `${block}\n` : '';
             }
-            case 'span':
-                return children;
             default:
+                if (hasStrikeStyle) {
+                    return children ? `~~${children}~~` : '';
+                }
+                if (hasBoldStyle) {
+                    return children ? `**${children}**` : '';
+                }
+                if (hasItalicStyle) {
+                    return children ? `*${children}*` : '';
+                }
                 return Array.from(node.childNodes).map(walkNodes).join('');
         }
     };
