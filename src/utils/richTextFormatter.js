@@ -34,7 +34,7 @@ const processRichText = (text, allowRichText = true) => {
 
     // Protect inline code first (has highest priority, prevents other formatting)
     result = result.replace(/`([^`\n]+?)`/g, (match, code) => {
-        const placeholder = `__CODE_${codeIndex}__`;
+        const placeholder = `@@WW_CODE_${codeIndex}@@`;
         codeBlocks.push(`<code>${code}</code>`);
         codeIndex++;
         return placeholder;
@@ -42,7 +42,7 @@ const processRichText = (text, allowRichText = true) => {
 
     // Protect strikethrough
     result = result.replace(/~~([\s\S]+?)~~/g, (match, content) => {
-        const placeholder = `__STRIKE_${strikeIndex}__`;
+        const placeholder = `@@WW_STRIKE_${strikeIndex}@@`;
         strikeBlocks.push(`<s>${content}</s>`);
         strikeIndex++;
         return placeholder;
@@ -69,10 +69,10 @@ const processRichText = (text, allowRichText = true) => {
 
     // Restore protected content (code blocks first, then strikethrough)
     codeBlocks.forEach((content, index) => {
-        result = result.replace(`__CODE_${index}__`, content);
+        result = result.replace(`@@WW_CODE_${index}@@`, content);
     });
     strikeBlocks.forEach((content, index) => {
-        result = result.replace(`__STRIKE_${index}__`, content);
+        result = result.replace(`@@WW_STRIKE_${index}@@`, content);
     });
 
     // Convert simple markdown bullet lists (- item) into HTML lists
