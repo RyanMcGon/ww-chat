@@ -532,13 +532,13 @@ export default {
 
         const richSizingStyle = computed(() => ({
             '--rich-input-min-height': props.inputHeight || '38px',
-            '--rich-input-max-height': props.inputMaxHeight || '260px',
+            '--rich-input-max-height': props.inputMaxHeight || '160px',
         }));
 
         const textareaMaxHeight = computed(() => {
-            if (!props.inputMaxHeight) return 260;
+            if (!props.inputMaxHeight) return 160;
             const parsed = parseInt(props.inputMaxHeight, 10);
-            return Number.isFinite(parsed) ? parsed : 260;
+            return Number.isFinite(parsed) ? parsed : 160;
         });
 
         const adjustTextareaHeight = () => {
