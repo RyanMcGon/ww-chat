@@ -252,6 +252,11 @@ const convertHtmlToMarkdown = (html) => {
     const doc = document.createElement('div');
     doc.innerHTML = html || '';
 
+    const hasMeaningfulText = (value) => {
+        if (value == null) return false;
+        return value.replace(/[\s\u200B\u00A0]+/g, '') !== '';
+    };
+
     const walkNodes = (node) => {
         if (!node) return '';
 
@@ -293,6 +298,9 @@ const convertHtmlToMarkdown = (html) => {
             case 'strike':
                 return children ? `~~${children}~~` : '';
             case 'span': {
+                if (!hasMeaningfulText(children)) {
+                    return children;
+                }
                 if (hasStrikeStyle) {
                     return children ? `~~${children}~~` : '';
                 }
@@ -318,9 +326,24 @@ const convertHtmlToMarkdown = (html) => {
             case 'div':
             case 'p': {
                 const block = Array.from(node.childNodes).map(walkNodes).join('');
-                return block ? `${block}\n` : '';
+                if (!block) return '';
+                if (hasMeaningfulText(block)) {
+                    if (hasStrikeStyle) {
+                        return `~~${block}~~\n`;
+                    }
+                    if (hasBoldStyle) {
+                        return `**${block}**\n`;
+                    }
+                    if (hasItalicStyle) {
+                        return `*${block}*\n`;
+                    }
+                }
+                return `${block}\n`;
             }
             default:
+                if (!hasMeaningfulText(children)) {
+                    return Array.from(node.childNodes).map(walkNodes).join('');
+                }
                 if (hasStrikeStyle) {
                     return children ? `~~${children}~~` : '';
                 }
