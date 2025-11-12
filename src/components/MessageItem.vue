@@ -618,6 +618,10 @@ export default {
             opacity: 0.7;
         }
 
+        :deep(p) {
+            margin: 0;
+        }
+
         :deep(a) {
             color: inherit;
             text-decoration: underline;

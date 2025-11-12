@@ -92,7 +92,17 @@ const processRichText = (text, allowRichText = true) => {
             listBuffer.push(`<li>${match[1]}</li>`);
         } else {
             flushList();
-            segments.push(line);
+            const trimmed = line.trim();
+            if (!trimmed) {
+                segments.push('');
+                return;
+            }
+
+            if (/^<\s*(ul|ol|li|div|p|table|blockquote|pre)/i.test(trimmed)) {
+                segments.push(trimmed);
+            } else {
+                segments.push(`<p>${trimmed}</p>`);
+            }
         }
     });
 

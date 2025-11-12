@@ -310,6 +310,10 @@ const convertHtmlToMarkdown = (html) => {
             return node.textContent || '';
         }
 
+        if (node.classList?.contains('ww-rt-break')) {
+            return '\n';
+        }
+
         const tag = node.tagName.toLowerCase();
         const nodeMarkers = getMarkersFromNode(node);
         const combinedMarkers = mergeMarkers(activeMarkers, nodeMarkers);
@@ -1858,6 +1862,10 @@ export default {
             display: block;
             margin: 0;
             line-height: 1.5;
+        }
+
+        :deep(p) {
+            margin: 0;
         }
     }
 
