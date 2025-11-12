@@ -99,7 +99,10 @@ const processRichText = (text, allowRichText = true) => {
     flushList();
 
     result = segments.join('\n');
-    result = result.replace(/<\/ul>(?:\n){2,}/g, '</ul>\n');
+    result = result.replace(
+        /<\/ul>(?:\s*\n\s*){2,}/g,
+        '</ul><div class="ww-rt-break"><br /></div>'
+    );
 
     return result;
 };

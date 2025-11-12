@@ -1853,6 +1853,12 @@ export default {
         :deep(li) {
             margin: 0.2rem 0;
         }
+
+        :deep(.ww-rt-break) {
+            display: block;
+            margin: 0;
+            line-height: 1.5;
+        }
     }
 
     &__input {
