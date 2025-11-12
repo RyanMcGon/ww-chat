@@ -1744,7 +1744,7 @@ export default {
         border: v-bind('textareaBorder');
         background-color: v-bind('inputBgColor');
         color: v-bind('inputTextColor');
-        overflow-y: hidden;
+        overflow-y: auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         outline: none;
