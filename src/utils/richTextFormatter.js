@@ -207,7 +207,15 @@ export const formatRichText = (text, mentions = [], allowRichText = true, mentio
         const escapedMention = escapeHtml(occurrence.text);
         parts.push(`<span class="ww-message-item__mention" style="background-color: ${mentionsBgColor}; color: ${mentionsColor};">${escapedMention}</span>`);
 
-        lastIndex = occurrence.end;
+        // Check if there's a space immediately after the mention and preserve it
+        const charAfterMention = text.charAt(occurrence.end);
+        if (charAfterMention === ' ') {
+            // Include the space after the mention span to ensure it's preserved
+            parts.push(' ');
+            lastIndex = occurrence.end + 1;
+        } else {
+            lastIndex = occurrence.end;
+        }
     });
 
     // Process remaining text after last mention
