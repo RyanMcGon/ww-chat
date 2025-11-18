@@ -134,7 +134,6 @@
                     :data-placeholder="placeholder"
                     contenteditable="true"
                     @input="handleRichInput"
-                    @beforeinput="handleBeforeInput"
                     @keydown="handleRichKeyDown"
                     @keyup="updateRichSelection"
                     @mouseup="updateRichSelection"
@@ -1000,57 +999,80 @@ export default {
             adjustTextareaHeight();
         };
 
-        const handleBeforeInput = (event) => {
+        const cleanupMentionSpans = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
-            if (!event.data) return; // Only handle text insertion, not deletions
             
-            // Prevent insertion inside mention spans
-            const win = getFrontWindow();
-            const selection = win.getSelection();
-            if (selection && selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                if (!range.collapsed) return; // Only handle when cursor is collapsed (not selection)
+            const doc = getFrontDocument();
+            
+            // Save caret position by offset (more reliable when DOM changes)
+            const savedCaretOffset = getCaretOffsetFromRich();
+            
+            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+            let domModified = false;
+            
+            mentionSpans.forEach(span => {
+                const text = span.textContent || '';
+                // Find the mention name from the mentions array
+                const mention = mentions.value.find(m => {
+                    const expectedText = `@${m.name}`;
+                    return text.startsWith(expectedText);
+                });
                 
-                let node = range.startContainer.nodeType === Node.TEXT_NODE 
-                    ? range.startContainer.parentNode 
-                    : range.startContainer;
-                
-                // Walk up to find if we're inside a mention span
-                while (node && node !== richInputRef.value) {
-                    if (node.nodeType === Node.ELEMENT_NODE && 
-                        node.classList && 
-                        node.classList.contains('ww-message-item__mention')) {
-                        // We're inside a mention span, move cursor outside and insert text there
-                        event.preventDefault();
-                        const doc = getFrontDocument();
-                        const mentionSpan = node;
+                if (mention) {
+                    const expectedText = `@${mention.name}`;
+                    // If the span contains more than just the mention text, clean it up
+                    if (text !== expectedText) {
+                        // Extract any content after the mention
+                        const extraContent = text.substring(expectedText.length);
+                        span.textContent = expectedText;
                         
-                        // Create a text node after the mention span for the input
-                        const textNode = doc.createTextNode(event.data);
-                        if (mentionSpan.nextSibling) {
-                            mentionSpan.parentNode.insertBefore(textNode, mentionSpan.nextSibling);
-                        } else {
-                            mentionSpan.parentNode.appendChild(textNode);
+                        // If there's extra content, move it outside the span
+                        if (extraContent) {
+                            const textNode = doc.createTextNode(extraContent);
+                            if (span.nextSibling) {
+                                span.parentNode.insertBefore(textNode, span.nextSibling);
+                            } else {
+                                span.parentNode.appendChild(textNode);
+                            }
+                            domModified = true;
                         }
-                        
-                        // Move cursor after the inserted text
-                        nextTick(() => {
-                            const newRange = doc.createRange();
-                            newRange.setStartAfter(textNode);
-                            newRange.collapse(true);
-                            selection.removeAllRanges();
-                            selection.addRange(newRange);
-                            handleRichInput();
-                        });
-                        return;
                     }
-                    node = node.parentNode;
+                } else {
+                    // If we can't find the mention, try to extract just the mention part
+                    // Match @username or @firstname lastname (but stop at trailing space)
+                    const mentionMatch = text.match(/^(@[^\s]+(?:\s+[^\s]+)*?)(\s+.*)?$/);
+                    if (mentionMatch) {
+                        const mentionText = mentionMatch[1];
+                        const extraContent = mentionMatch[2] || '';
+                        if (extraContent) {
+                            span.textContent = mentionText;
+                            const textNode = doc.createTextNode(extraContent);
+                            if (span.nextSibling) {
+                                span.parentNode.insertBefore(textNode, span.nextSibling);
+                            } else {
+                                span.parentNode.appendChild(textNode);
+                            }
+                            domModified = true;
+                        }
+                    }
                 }
+            });
+            
+            // Restore cursor position if DOM was modified
+            if (domModified) {
+                nextTick(() => {
+                    // Try to restore by offset first (more reliable)
+                    setCaretOffsetInRich(savedCaretOffset);
+                });
             }
         };
 
         const handleRichInput = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
+            
+            // Clean up mention spans first to ensure they're correct
+            cleanupMentionSpans();
+            
             const caret = getCaretOffsetFromRich();
             const html = richInputRef.value.innerHTML;
             const { markdown, plainText } = convertHtmlToMarkdown(html);
