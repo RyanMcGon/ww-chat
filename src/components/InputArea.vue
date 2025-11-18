@@ -792,17 +792,8 @@ export default {
             richInputRef.value.innerHTML = html || '';
             plainTextValue.value = richInputRef.value.textContent?.replace(/\u00a0/g, ' ') || '';
             
-            // Clean up any mention spans that might have trailing spaces (shouldn't happen, but just in case)
-            const doc = getFrontDocument();
-            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
-            mentionSpans.forEach(span => {
-                const text = span.textContent || '';
-                const trimmedText = text.trimEnd();
-                if (trimmedText !== text) {
-                    // Remove trailing whitespace from mention span
-                    span.textContent = trimmedText;
-                }
-            });
+            // Don't clean up mention spans here - let handleRichInput handle it
+            // This prevents interference with normal typing
             
             nextTick(() => {
                 setCaretOffsetInRich(caret);
@@ -813,18 +804,37 @@ export default {
         watch(
             () => props.modelValue,
             newValue => {
-                inputValue.value = newValue || '';
+                // Only sync if the value actually changed from outside (not from our own input)
+                const frontDoc = getFrontDocument();
+                const isFocused = props.allowRichText 
+                    ? frontDoc?.activeElement === richInputRef.value
+                    : frontDoc?.activeElement === textareaRef.value;
+                
+                const currentValue = inputValue.value || '';
+                const newValueStr = newValue || '';
+                
+                // If the user is actively typing and values match, don't sync (to avoid interference)
+                // Also check if the new value is different from current (external change)
+                if (isFocused && currentValue === newValueStr) {
+                    return; // User is typing, values match, skip sync
+                }
+                
+                // Only update if value actually changed
+                if (currentValue !== newValueStr) {
+                    inputValue.value = newValueStr;
+                } else {
+                    return; // No change, skip
+                }
                 if (!props.allowRichText) {
                     plainTextValue.value = inputValue.value;
                     nextTick(() => {
                         const textarea = textareaRef.value;
                         if (textarea) {
-                            const frontDoc = getFrontDocument();
-                            const isFocused = frontDoc?.activeElement === textarea;
-                            const caretPos = isFocused
+                            const isFocusedNow = frontDoc?.activeElement === textarea;
+                            const caretPos = isFocusedNow
                                 ? textarea.selectionEnd ?? inputValue.value.length
                                 : inputValue.value.length;
-                            if (!isFocused) {
+                            if (!isFocusedNow) {
                                 textarea.setSelectionRange(caretPos, caretPos);
                             }
                             updateSelection();
@@ -839,10 +849,9 @@ export default {
                     nextTick(() => {
                         const richInput = richInputRef.value;
                         if (richInput) {
-                            const frontDoc = getFrontDocument();
-                            const isFocused = frontDoc?.activeElement === richInput;
-                            const caretPos = isFocused ? getCaretOffsetFromRich() : plainTextValue.value.length;
-                            if (!isFocused) {
+                            const isFocusedNow = frontDoc?.activeElement === richInput;
+                            const caretPos = isFocusedNow ? getCaretOffsetFromRich() : plainTextValue.value.length;
+                            if (!isFocusedNow) {
                                 setCaretOffsetInRich(plainTextValue.value.length);
                             }
                             processMentionState(plainTextValue.value, caretPos);
