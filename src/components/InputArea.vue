@@ -134,6 +134,7 @@
                     :data-placeholder="placeholder"
                     contenteditable="true"
                     @input="handleRichInput"
+                    @beforeinput="handleBeforeInput"
                     @keydown="handleRichKeyDown"
                     @keyup="updateRichSelection"
                     @mouseup="updateRichSelection"
@@ -791,6 +792,19 @@ export default {
             );
             richInputRef.value.innerHTML = html || '';
             plainTextValue.value = richInputRef.value.textContent?.replace(/\u00a0/g, ' ') || '';
+            
+            // Clean up any mention spans that might have trailing spaces (shouldn't happen, but just in case)
+            const doc = getFrontDocument();
+            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+            mentionSpans.forEach(span => {
+                const text = span.textContent || '';
+                const trimmedText = text.trimEnd();
+                if (trimmedText !== text) {
+                    // Remove trailing whitespace from mention span
+                    span.textContent = trimmedText;
+                }
+            });
+            
             nextTick(() => {
                 setCaretOffsetInRich(caret);
                 isSyncingRich.value = false;
@@ -986,33 +1000,57 @@ export default {
             adjustTextareaHeight();
         };
 
+        const handleBeforeInput = (event) => {
+            if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
+            if (!event.data) return; // Only handle text insertion, not deletions
+            
+            // Prevent insertion inside mention spans
+            const win = getFrontWindow();
+            const selection = win.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                if (!range.collapsed) return; // Only handle when cursor is collapsed (not selection)
+                
+                let node = range.startContainer.nodeType === Node.TEXT_NODE 
+                    ? range.startContainer.parentNode 
+                    : range.startContainer;
+                
+                // Walk up to find if we're inside a mention span
+                while (node && node !== richInputRef.value) {
+                    if (node.nodeType === Node.ELEMENT_NODE && 
+                        node.classList && 
+                        node.classList.contains('ww-message-item__mention')) {
+                        // We're inside a mention span, move cursor outside and insert text there
+                        event.preventDefault();
+                        const doc = getFrontDocument();
+                        const mentionSpan = node;
+                        
+                        // Create a text node after the mention span for the input
+                        const textNode = doc.createTextNode(event.data);
+                        if (mentionSpan.nextSibling) {
+                            mentionSpan.parentNode.insertBefore(textNode, mentionSpan.nextSibling);
+                        } else {
+                            mentionSpan.parentNode.appendChild(textNode);
+                        }
+                        
+                        // Move cursor after the inserted text
+                        nextTick(() => {
+                            const newRange = doc.createRange();
+                            newRange.setStartAfter(textNode);
+                            newRange.collapse(true);
+                            selection.removeAllRanges();
+                            selection.addRange(newRange);
+                            handleRichInput();
+                        });
+                        return;
+                    }
+                    node = node.parentNode;
+                }
+            }
+        };
+
         const handleRichInput = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
-            
-            // Clean up mention spans to ensure they don't contain trailing spaces
-            const doc = getFrontDocument();
-            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
-            mentionSpans.forEach(span => {
-                const text = span.textContent || '';
-                // Check if mention span ends with whitespace (which shouldn't be there)
-                const trimmedText = text.trimEnd();
-                if (trimmedText !== text) {
-                    // Extract trailing whitespace and move it outside the span
-                    const trailingWhitespace = text.substring(trimmedText.length);
-                    span.textContent = trimmedText;
-                    
-                    // Insert trailing whitespace after the span
-                    if (trailingWhitespace) {
-                        const textNode = doc.createTextNode(trailingWhitespace);
-                        if (span.nextSibling) {
-                            span.parentNode.insertBefore(textNode, span.nextSibling);
-                        } else {
-                            span.parentNode.appendChild(textNode);
-                        }
-                    }
-                }
-            });
-            
             const caret = getCaretOffsetFromRich();
             const html = richInputRef.value.innerHTML;
             const { markdown, plainText } = convertHtmlToMarkdown(html);
