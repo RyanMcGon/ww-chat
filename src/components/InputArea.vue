@@ -988,6 +988,31 @@ export default {
 
         const handleRichInput = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
+            
+            // Clean up mention spans to ensure they don't contain trailing spaces
+            const doc = getFrontDocument();
+            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+            mentionSpans.forEach(span => {
+                const text = span.textContent || '';
+                // Check if mention span ends with whitespace (which shouldn't be there)
+                const trimmedText = text.trimEnd();
+                if (trimmedText !== text) {
+                    // Extract trailing whitespace and move it outside the span
+                    const trailingWhitespace = text.substring(trimmedText.length);
+                    span.textContent = trimmedText;
+                    
+                    // Insert trailing whitespace after the span
+                    if (trailingWhitespace) {
+                        const textNode = doc.createTextNode(trailingWhitespace);
+                        if (span.nextSibling) {
+                            span.parentNode.insertBefore(textNode, span.nextSibling);
+                        } else {
+                            span.parentNode.appendChild(textNode);
+                        }
+                    }
+                }
+            });
+            
             const caret = getCaretOffsetFromRich();
             const html = richInputRef.value.innerHTML;
             const { markdown, plainText } = convertHtmlToMarkdown(html);
