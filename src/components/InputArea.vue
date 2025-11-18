@@ -1020,17 +1020,20 @@ export default {
                 
                 if (mention) {
                     const expectedText = `@${mention.name}`;
-                    // If the span contains more than just the mention text, clean it up
-                    if (text !== expectedText) {
+                    // Only clean up if the span contains MORE than just the mention text
+                    // (i.e., it has extra content that shouldn't be there)
+                    if (text.length > expectedText.length) {
                         // Extract any content after the mention
                         const extraContent = text.substring(expectedText.length);
                         span.textContent = expectedText;
                         
                         // If there's extra content, move it outside the span
+                        // Don't merge with next sibling - just insert it to preserve exact content
                         if (extraContent) {
                             const textNode = doc.createTextNode(extraContent);
-                            if (span.nextSibling) {
-                                span.parentNode.insertBefore(textNode, span.nextSibling);
+                            const nextSibling = span.nextSibling;
+                            if (nextSibling) {
+                                span.parentNode.insertBefore(textNode, nextSibling);
                             } else {
                                 span.parentNode.appendChild(textNode);
                             }
@@ -1044,11 +1047,13 @@ export default {
                     if (mentionMatch) {
                         const mentionText = mentionMatch[1];
                         const extraContent = mentionMatch[2] || '';
-                        if (extraContent) {
+                        if (extraContent && text.length > mentionText.length) {
                             span.textContent = mentionText;
+                            // Don't merge - just insert to preserve exact content
                             const textNode = doc.createTextNode(extraContent);
-                            if (span.nextSibling) {
-                                span.parentNode.insertBefore(textNode, span.nextSibling);
+                            const nextSibling = span.nextSibling;
+                            if (nextSibling) {
+                                span.parentNode.insertBefore(textNode, nextSibling);
                             } else {
                                 span.parentNode.appendChild(textNode);
                             }
@@ -1070,8 +1075,25 @@ export default {
         const handleRichInput = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
             
-            // Clean up mention spans first to ensure they're correct
-            cleanupMentionSpans();
+            // Only clean up mention spans if we detect they have extra content
+            // This prevents interference with normal typing
+            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+            let needsCleanup = false;
+            for (const span of mentionSpans) {
+                const text = span.textContent || '';
+                const mention = mentions.value.find(m => {
+                    const expectedText = `@${m.name}`;
+                    return text.startsWith(expectedText);
+                });
+                if (mention && text.length > `@${mention.name}`.length) {
+                    needsCleanup = true;
+                    break;
+                }
+            }
+            
+            if (needsCleanup) {
+                cleanupMentionSpans();
+            }
             
             const caret = getCaretOffsetFromRich();
             const html = richInputRef.value.innerHTML;
