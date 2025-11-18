@@ -1004,6 +1004,51 @@ export default {
             }
             if (showMentionsDropdown.value) {
                 handleKeyDown(event);
+                return;
+            }
+            
+            // Handle space key to prevent it from being inserted inside mention spans
+            if (event.key === ' ' && props.allowRichText && richInputRef.value) {
+                const doc = getFrontDocument();
+                const win = getFrontWindow();
+                const selection = win.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    if (range.collapsed) {
+                        // Check if cursor is inside a mention span
+                        const container = range.startContainer;
+                        let node = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+                        
+                        // Walk up to find if we're inside a mention span
+                        while (node && node !== richInputRef.value) {
+                            if (node.nodeType === Node.ELEMENT_NODE && 
+                                node.classList && 
+                                node.classList.contains('ww-message-item__mention')) {
+                                // We're inside a mention span, prevent space insertion and move cursor outside
+                                event.preventDefault();
+                                const spaceNode = doc.createTextNode(' ');
+                                const mentionSpan = node;
+                                
+                                // Insert space after the mention span
+                                if (mentionSpan.nextSibling) {
+                                    mentionSpan.parentNode.insertBefore(spaceNode, mentionSpan.nextSibling);
+                                } else {
+                                    mentionSpan.parentNode.appendChild(spaceNode);
+                                }
+                                
+                                // Move cursor after the space
+                                const newRange = doc.createRange();
+                                newRange.setStartAfter(spaceNode);
+                                newRange.collapse(true);
+                                selection.removeAllRanges();
+                                selection.addRange(newRange);
+                                handleRichInput();
+                                return;
+                            }
+                            node = node.parentNode;
+                        }
+                    }
+                }
             }
         };
 
