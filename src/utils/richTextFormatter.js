@@ -130,12 +130,24 @@ const findMentions = (text, mentions = []) => {
             let index = text.indexOf(mentionPattern);
             
             while (index !== -1) {
-                mentionOccurrences.push({
-                    start: index,
-                    end: index + mentionPattern.length,
-                    text: mentionPattern,
-                    mention: mention
-                });
+                const endIndex = index + mentionPattern.length;
+                const charAfter = text.charAt(endIndex);
+                
+                // Check if mention is properly delimited (followed by whitespace, punctuation, or end of string)
+                // Also ensure it's not part of a larger word (check character before @)
+                const charBefore = index > 0 ? text.charAt(index - 1) : '';
+                const isWordBoundaryBefore = !charBefore || /\s/.test(charBefore);
+                const isWordBoundaryAfter = !charAfter || /\s/.test(charAfter) || /[,.:;!?)\n]/.test(charAfter);
+                
+                if (isWordBoundaryBefore && isWordBoundaryAfter) {
+                    mentionOccurrences.push({
+                        start: index,
+                        end: endIndex,
+                        text: mentionPattern,
+                        mention: mention
+                    });
+                }
+                
                 index = text.indexOf(mentionPattern, index + 1);
             }
         });
