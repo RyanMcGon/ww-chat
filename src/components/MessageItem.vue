@@ -13,14 +13,17 @@
             :class="{ 'ww-message-item__content--own': isOwnMessage }"
             :style="messageStyles"
             @contextmenu.prevent="handleRightClick"
-            @mouseenter="showMenu = isOwnMessage && !isPending"
-            @mouseleave="showMenu = false"
+            @mouseenter="handleMouseEnter"
+            @mouseleave="handleMouseLeave"
         >
             <!-- Menu button for own messages -->
             <div
                 v-if="isOwnMessage && !isPending"
                 class="ww-message-item__menu"
-                :class="{ 'ww-message-item__menu--visible': showMenu }"
+                :class="{ 
+                    'ww-message-item__menu--visible': showMenu,
+                    'ww-message-item__menu--mobile': isMobile
+                }"
             >
                 <button
                     class="ww-message-item__menu-button"
@@ -279,6 +282,7 @@ export default {
         const menuIconText = ref(null);
         const editIconText = ref(null);
         const deleteIconText = ref(null);
+        const isMobile = ref(false);
 
         const dateTimeOptions = inject(
             'dateTimeOptions',
@@ -464,6 +468,10 @@ export default {
         const toggleMenu = () => {
             if (props.isPending) return;
             showMenuDropdown.value = !showMenuDropdown.value;
+            // On mobile, also show the menu button when dropdown is open
+            if (isMobile.value) {
+                showMenu.value = showMenuDropdown.value;
+            }
         };
 
         const handleEdit = () => {
@@ -484,6 +492,34 @@ export default {
         const handleClickOutside = (event) => {
             if (showMenuDropdown.value && !event.target.closest('.ww-message-item__menu')) {
                 showMenuDropdown.value = false;
+                // On mobile, also hide the menu button
+                if (isMobile.value) {
+                    showMenu.value = false;
+                }
+            }
+        };
+
+        // Detect mobile device
+        const detectMobile = () => {
+            if (typeof window !== 'undefined') {
+                // Check for touch capability and screen size
+                const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                const isSmallScreen = window.innerWidth <= 768;
+                isMobile.value = hasTouch && isSmallScreen;
+            }
+        };
+
+        const handleMouseEnter = () => {
+            // Only show on hover for desktop
+            if (!isMobile.value) {
+                showMenu.value = props.isOwnMessage && !props.isPending;
+            }
+        };
+
+        const handleMouseLeave = () => {
+            // Only hide on hover for desktop
+            if (!isMobile.value) {
+                showMenu.value = false;
             }
         };
 
@@ -491,11 +527,19 @@ export default {
             if (typeof document !== 'undefined') {
                 document.addEventListener('click', handleClickOutside);
             }
+            detectMobile();
+            // Re-detect on resize
+            if (typeof window !== 'undefined') {
+                window.addEventListener('resize', detectMobile);
+            }
         });
 
         onUnmounted(() => {
             if (typeof document !== 'undefined') {
                 document.removeEventListener('click', handleClickOutside);
+            }
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', detectMobile);
             }
         });
 
@@ -533,6 +577,7 @@ export default {
             toggleMenu,
             handleEdit,
             handleDelete,
+            isMobile,
         };
     },
 };
@@ -749,6 +794,23 @@ export default {
         &--visible {
             opacity: 1;
         }
+
+        // On mobile, always show the menu button
+        &--mobile {
+            opacity: 1;
+        }
+
+        // On mobile, make it more visible
+        @media (max-width: 768px) {
+            &--mobile {
+                opacity: 0.7; // Slightly transparent but visible
+                
+                &:active,
+                &--visible {
+                    opacity: 1;
+                }
+            }
+        }
     }
 
     &__menu-button {
@@ -763,6 +825,8 @@ export default {
         cursor: pointer;
         transition: all 0.2s ease;
         padding: 0;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
 
         &:hover {
             background: rgba(0, 0, 0, 0.1);
@@ -771,6 +835,21 @@ export default {
 
         &:active {
             transform: scale(0.95);
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        // Mobile-specific improvements
+        @media (max-width: 768px) {
+            width: 28px;
+            height: 28px;
+            background: rgba(0, 0, 0, 0.08);
+            min-width: 44px; // iOS recommended touch target
+            min-height: 44px;
+            padding: 8px; // Increase touch area
+            
+            &:active {
+                background: rgba(0, 0, 0, 0.15);
+            }
         }
     }
 
@@ -797,6 +876,13 @@ export default {
         min-width: 120px;
         overflow: hidden;
         z-index: 1000;
+
+        // Mobile-specific improvements
+        @media (max-width: 768px) {
+            min-width: 140px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+        }
     }
 
     &__menu-item {
@@ -812,9 +898,15 @@ export default {
         color: #334155;
         transition: background-color 0.15s ease;
         text-align: left;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
 
         &:hover {
             background-color: #f1f5f9;
+        }
+
+        &:active {
+            background-color: #e2e8f0;
         }
 
         &--delete {
@@ -823,6 +915,17 @@ export default {
             &:hover {
                 background-color: #fee2e2;
             }
+
+            &:active {
+                background-color: #fecaca;
+            }
+        }
+
+        // Mobile-specific improvements
+        @media (max-width: 768px) {
+            padding: 12px 16px;
+            min-height: 44px; // iOS recommended touch target
+            font-size: 0.9375rem;
         }
     }
 
@@ -843,8 +946,13 @@ export default {
         /* reserve space on the right so the icon never overlaps the text */
         padding-right: 40px;
 
-        &:hover .ww-message-item__menu {
+        &:hover .ww-message-item__menu:not(.ww-message-item__menu--mobile) {
             opacity: 1;
+        }
+
+        // On mobile, ensure menu is always accessible
+        @media (max-width: 768px) {
+            padding-right: 45px; // Slightly more space for larger mobile button
         }
     }
 }
