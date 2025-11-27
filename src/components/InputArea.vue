@@ -79,6 +79,7 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
+                        @touchstart.prevent="handleToolbarTouch('bold', $event)"
                         @click="applyFormat('bold')"
                         title="Bold"
                     >
@@ -89,6 +90,7 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
+                        @touchstart.prevent="handleToolbarTouch('italic', $event)"
                         @click="applyFormat('italic')"
                         title="Italic"
                     >
@@ -99,6 +101,7 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
+                        @touchstart.prevent="handleToolbarTouch('strike', $event)"
                         @click="applyFormat('strike')"
                         title="Strikethrough"
                     >
@@ -109,6 +112,7 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
+                        @touchstart.prevent="handleToolbarTouch('bullet', $event)"
                         @click="applyFormat('bullet')"
                         title="Bullet list"
                     >
@@ -119,6 +123,7 @@
                         class="ww-chat-input-area__toolbar-btn"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
+                        @touchstart.prevent="handleToolbarTouch('link', $event)"
                         @click="applyFormat('link')"
                         title="Insert link"
                     >
@@ -137,6 +142,7 @@
                     @keydown="handleRichKeyDown"
                     @keyup="updateRichSelection"
                     @mouseup="updateRichSelection"
+                    @touchend="updateRichSelection"
                 ></div>
 
                 <textarea
@@ -566,7 +572,24 @@ export default {
             const selection = frontWindow.getSelection?.();
             if (selection && selection.rangeCount > 0) {
                 try {
-                    savedRichRange.value = selection.getRangeAt(0).cloneRange();
+                    const range = selection.getRangeAt(0);
+                    // Only save if the selection is within our rich input
+                    if (richInputRef.value.contains(range.commonAncestorContainer)) {
+                        savedRichRange.value = range.cloneRange();
+                    } else {
+                        savedRichRange.value = null;
+                    }
+                } catch (error) {
+                    savedRichRange.value = null;
+                }
+            } else {
+                // On mobile, selection might be collapsed but we still want to save cursor position
+                try {
+                    const doc = getFrontDocument();
+                    const range = doc.createRange();
+                    range.selectNodeContents(richInputRef.value);
+                    range.collapse(false);
+                    savedRichRange.value = range;
                 } catch (error) {
                     savedRichRange.value = null;
                 }
@@ -604,25 +627,76 @@ export default {
             const doc = getFrontDocument();
             const frontWindow = getFrontWindow();
             const selection = frontWindow.getSelection?.();
-            if (!selection || selection.rangeCount === 0) return false;
+            
+            // Try to use saved range if current selection is invalid
+            let range = null;
+            if (selection && selection.rangeCount > 0) {
+                try {
+                    const testRange = selection.getRangeAt(0);
+                    if (testRange && richInputRef.value.contains(testRange.commonAncestorContainer)) {
+                        range = testRange;
+                    }
+                } catch (error) {
+                    // Selection might be invalid, try saved range
+                }
+            }
+            
+            // If no valid range, try to restore from saved range
+            if (!range && savedRichRange.value) {
+                try {
+                    range = savedRichRange.value.cloneRange();
+                } catch (error) {
+                    // Saved range is invalid
+                }
+            }
+            
+            // If still no range, create one at the end
+            if (!range) {
+                range = doc.createRange();
+                range.selectNodeContents(richInputRef.value);
+                range.collapse(false);
+            }
 
-            const range = selection.getRangeAt(0);
-            if (!range || !richInputRef.value.contains(range.commonAncestorContainer) || range.collapsed) {
+            // If range is collapsed (no selection), create a text node and wrap it
+            if (range.collapsed) {
+                const textNode = doc.createTextNode('\u200B'); // Zero-width space as placeholder
+                range.insertNode(textNode);
+                range.setStartBefore(textNode);
+                range.setEndAfter(textNode);
+            }
+
+            // Ensure range is within our rich input
+            if (!richInputRef.value.contains(range.commonAncestorContainer)) {
                 return false;
             }
 
-            const wrapper = doc.createElement(tagName);
-            const content = range.extractContents();
-            wrapper.appendChild(content);
-            range.insertNode(wrapper);
+            try {
+                const wrapper = doc.createElement(tagName);
+                const content = range.extractContents();
+                
+                // Remove zero-width space if it's the only content
+                if (content.textContent === '\u200B') {
+                    wrapper.textContent = '';
+                } else {
+                    wrapper.appendChild(content);
+                }
+                
+                range.insertNode(wrapper);
 
-            const newRange = doc.createRange();
-            newRange.selectNodeContents(wrapper);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
+                // Select the wrapper content
+                const newRange = doc.createRange();
+                newRange.selectNodeContents(wrapper);
+                if (selection) {
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                }
 
-            captureCurrentRichRange();
-            return true;
+                captureCurrentRichRange();
+                return true;
+            } catch (error) {
+                console.warn('Failed to apply manual format:', error);
+                return false;
+            }
         };
 
         const updateSelection = () => {
@@ -638,14 +712,26 @@ export default {
             if (!props.allowRichText || !richInputRef.value) return;
             const frontWindow = getFrontWindow();
             const selection = frontWindow.getSelection();
-            if (!selection || selection.rangeCount === 0) return;
-            const range = selection.getRangeAt(0);
-            captureCurrentRichRange();
-            const preRange = range.cloneRange();
-            preRange.selectNodeContents(richInputRef.value);
-            preRange.setEnd(range.endContainer, range.endOffset);
-            const caret = preRange.toString().length;
-            processMentionState(plainTextValue.value, caret);
+            if (!selection) return;
+            
+            // Capture selection even if rangeCount is 0 (mobile can have collapsed selection)
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                // Only capture if selection is within our rich input
+                if (richInputRef.value.contains(range.commonAncestorContainer)) {
+                    captureCurrentRichRange();
+                    const preRange = range.cloneRange();
+                    preRange.selectNodeContents(richInputRef.value);
+                    preRange.setEnd(range.endContainer, range.endOffset);
+                    const caret = preRange.toString().length;
+                    processMentionState(plainTextValue.value, caret);
+                }
+            } else {
+                // On mobile, selection might be collapsed, still capture cursor position
+                captureCurrentRichRange();
+                const caret = plainTextValue.value.length;
+                processMentionState(plainTextValue.value, caret);
+            }
         };
 
         const showMentionsDropdown = ref(false);
@@ -1244,46 +1330,85 @@ export default {
             const doc = getFrontDocument();
             const win = getFrontWindow();
 
+            // Capture selection before focusing (important for mobile)
+            captureCurrentRichRange();
+            
             focusTextarea();
-            restoreSavedRichRange();
+            
+            // Small delay on mobile to ensure focus is established
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const applyFormat = () => {
+                restoreSavedRichRange();
+                
+                let executed = false;
 
-            let executed = false;
+                if (format === 'bold') {
+                    const before = richInputRef.value.innerHTML;
+                    // Try execCommand first, but it's unreliable on mobile
+                    try {
+                        executed = doc.execCommand('bold', false, null);
+                    } catch (error) {
+                        executed = false;
+                    }
+                    // If execCommand failed or didn't change anything, use manual method
+                    if (!executed || richInputRef.value.innerHTML === before) {
+                        executed = applyManualInlineFormat('strong');
+                    }
+                } else if (format === 'italic') {
+                    const before = richInputRef.value.innerHTML;
+                    let result = false;
+                    try {
+                        result = doc.execCommand('italic', false, null);
+                    } catch (error) {
+                        result = false;
+                    }
+                    executed = result;
+                    if (!result || richInputRef.value.innerHTML === before) {
+                        executed = applyManualInlineFormat('em') || executed;
+                    }
+                } else if (format === 'strike') {
+                    const before = richInputRef.value.innerHTML;
+                    let result = false;
+                    try {
+                        result = doc.execCommand('strikeThrough', false, null);
+                    } catch (error) {
+                        result = false;
+                    }
+                    executed = result;
+                    if (!result || richInputRef.value.innerHTML === before) {
+                        executed = applyManualInlineFormat('s') || executed;
+                    }
+                } else if (format === 'bullet') {
+                    try {
+                        executed = doc.execCommand('insertUnorderedList', false, null);
+                    } catch (error) {
+                        executed = false;
+                    }
+                } else if (format === 'link') {
+                    const promptFn = win?.prompt ? win.prompt.bind(win) : undefined;
+                    const url = promptFn ? promptFn('Enter URL', 'https://') : undefined;
+                    if (url) {
+                        try {
+                            executed = doc.execCommand('createLink', false, url);
+                        } catch (error) {
+                            executed = false;
+                        }
+                    }
+                }
 
-            if (format === 'bold') {
-                const before = richInputRef.value.innerHTML;
-                executed = doc.execCommand('bold');
-                if (!executed || richInputRef.value.innerHTML === before) {
-                    executed = applyManualInlineFormat('strong');
+                if (executed) {
+                    captureCurrentRichRange();
                 }
-            } else if (format === 'italic') {
-                const before = richInputRef.value.innerHTML;
-                const result = doc.execCommand('italic');
-                executed = result;
-                if (!result || richInputRef.value.innerHTML === before) {
-                    executed = applyManualInlineFormat('em') || executed;
-                }
-            } else if (format === 'strike') {
-                const before = richInputRef.value.innerHTML;
-                const result = doc.execCommand('strikeThrough');
-                executed = result;
-                if (!result || richInputRef.value.innerHTML === before) {
-                    executed = applyManualInlineFormat('s') || executed;
-                }
-            } else if (format === 'bullet') {
-                executed = doc.execCommand('insertUnorderedList');
-            } else if (format === 'link') {
-                const promptFn = win?.prompt ? win.prompt.bind(win) : undefined;
-                const url = promptFn ? promptFn('Enter URL', 'https://') : undefined;
-                if (url) {
-                    executed = doc.execCommand('createLink', false, url);
-                }
+
+                handleRichInput();
+            };
+            
+            if (isMobile) {
+                // Small delay to ensure focus and selection are ready on mobile
+                setTimeout(applyFormat, 50);
+            } else {
+                applyFormat();
             }
-
-            if (executed) {
-                captureCurrentRichRange();
-            }
-
-            handleRichInput();
         };
 
         const applyFormat = (format) => {
@@ -1511,6 +1636,22 @@ export default {
             emit('cancel-edit');
         };
 
+        const handleToolbarTouch = (format, event) => {
+            // Prevent default touch behavior
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // Capture selection before applying format (critical for mobile)
+            if (props.allowRichText) {
+                captureCurrentRichRange();
+            } else {
+                updateSelection();
+            }
+            
+            // Apply the format
+            applyFormat(format);
+        };
+
         const isImageFile = attachment => {
             if (!attachment.type) return false;
             return attachment.type.startsWith('image/');
@@ -1609,6 +1750,7 @@ export default {
             handleRichInput,
             handleRichKeyDown,
             richPreviewHtml,
+            handleToolbarTouch,
         };
     },
 };
@@ -1810,6 +1952,14 @@ export default {
         border-radius: 8px;
         background: rgba(148, 163, 184, 0.12);
         align-self: stretch;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+
+        // Mobile-specific improvements
+        @media (max-width: 768px) {
+            padding: 6px 8px;
+            gap: 10px;
+        }
     }
 
     &__toolbar-btn {
@@ -1824,7 +1974,11 @@ export default {
         align-items: center;
         justify-content: center;
         min-width: 30px;
+        min-height: 32px;
         transition: background 0.2s ease, transform 0.1s ease;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none;
 
         &:hover:not(:disabled) {
             background: rgba(148, 163, 184, 0.2);
@@ -1832,11 +1986,20 @@ export default {
 
         &:active:not(:disabled) {
             transform: scale(0.95);
+            background: rgba(148, 163, 184, 0.3);
         }
 
         &:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        // Mobile-specific improvements
+        @media (max-width: 768px) {
+            min-width: 36px;
+            min-height: 36px;
+            padding: 6px 8px;
+            font-size: 0.9375rem;
         }
     }
 
@@ -1866,6 +2029,9 @@ export default {
         outline: none;
         white-space: pre-wrap;
         max-height: calc(var(--rich-input-max-height, 260px));
+        -webkit-tap-highlight-color: transparent;
+        -webkit-user-select: text;
+        user-select: text;
 
         &:not(.ww-chat-input-area__rich-input--disabled) {
             min-height: calc(var(--rich-input-min-height, 38px));
@@ -1899,11 +2065,13 @@ export default {
             overflow-y: hidden;
         }
 
-        :deep(strong) {
-            font-weight: 600;
+        :deep(strong),
+        :deep(b) {
+            font-weight: 700;
         }
 
-        :deep(em) {
+        :deep(em),
+        :deep(i) {
             font-style: italic;
         }
 

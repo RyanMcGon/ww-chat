@@ -590,11 +590,13 @@ export default {
         }
 
         // Rich text styling
-        :deep(strong) {
-            font-weight: 600;
+        :deep(strong),
+        :deep(b) {
+            font-weight: 700;
         }
 
-        :deep(em) {
+        :deep(em),
+        :deep(i) {
             font-style: italic;
         }
 
