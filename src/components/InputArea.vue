@@ -81,6 +81,7 @@
                     <button
                         type="button"
                         class="ww-chat-input-area__toolbar-btn"
+                        :class="{ 'ww-chat-input-area__toolbar-btn--active': activeFormats.bold }"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
                         @touchstart.prevent="handleToolbarTouch('bold', $event)"
@@ -92,6 +93,7 @@
                     <button
                         type="button"
                         class="ww-chat-input-area__toolbar-btn"
+                        :class="{ 'ww-chat-input-area__toolbar-btn--active': activeFormats.italic }"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
                         @touchstart.prevent="handleToolbarTouch('italic', $event)"
@@ -103,6 +105,7 @@
                     <button
                         type="button"
                         class="ww-chat-input-area__toolbar-btn"
+                        :class="{ 'ww-chat-input-area__toolbar-btn--active': activeFormats.strike }"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
                         @touchstart.prevent="handleToolbarTouch('strike', $event)"
@@ -114,6 +117,7 @@
                     <button
                         type="button"
                         class="ww-chat-input-area__toolbar-btn"
+                        :class="{ 'ww-chat-input-area__toolbar-btn--active': activeFormats.bullet }"
                         :disabled="isUiDisabled"
                         @mousedown.prevent
                         @touchstart.prevent="handleToolbarTouch('bullet', $event)"
@@ -229,7 +233,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, inject, watchEffect, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, inject, watchEffect, onMounted, onUnmounted } from 'vue';
 import { formatRichText } from '../utils/richTextFormatter';
 
 const getFrontWindow = () => {
@@ -539,6 +543,12 @@ export default {
         const selectionRange = ref({ start: 0, end: 0 });
         const isSyncingRich = ref(false);
         const savedRichRange = ref(null);
+        const activeFormats = ref({
+            bold: false,
+            italic: false,
+            strike: false,
+            bullet: false,
+        });
 
         const richSizingStyle = computed(() => ({
             '--rich-input-min-height': props.inputHeight || '38px',
@@ -712,6 +722,112 @@ export default {
             }
         };
 
+        const checkFormatState = () => {
+            if (!props.allowRichText || !richInputRef.value) return;
+            const doc = getFrontDocument();
+            
+            try {
+                // Check if we have a selection
+                const win = getFrontWindow();
+                const selection = win.getSelection();
+                if (!selection || selection.rangeCount === 0) {
+                    // No selection, clear all active formats
+                    activeFormats.value = {
+                        bold: false,
+                        italic: false,
+                        strike: false,
+                        bullet: false,
+                    };
+                    return;
+                }
+                
+                const range = selection.getRangeAt(0);
+                if (!richInputRef.value.contains(range.commonAncestorContainer)) {
+                    activeFormats.value = {
+                        bold: false,
+                        italic: false,
+                        strike: false,
+                        bullet: false,
+                    };
+                    return;
+                }
+                
+                // Check formatting states using queryCommandState
+                // This works even if execCommand is deprecated
+                try {
+                    activeFormats.value.bold = doc.queryCommandState('bold') || false;
+                } catch (e) {
+                    // Fallback: check if selection is in a strong/b tag
+                    try {
+                        const container = range.commonAncestorContainer;
+                        const element = container.nodeType === Node.TEXT_NODE 
+                            ? container.parentElement 
+                            : container;
+                        if (element) {
+                            activeFormats.value.bold = element.closest('strong, b') !== null;
+                        }
+                    } catch (e2) {
+                        activeFormats.value.bold = false;
+                    }
+                }
+                
+                try {
+                    activeFormats.value.italic = doc.queryCommandState('italic') || false;
+                } catch (e) {
+                    try {
+                        const container = range.commonAncestorContainer;
+                        const element = container.nodeType === Node.TEXT_NODE 
+                            ? container.parentElement 
+                            : container;
+                        if (element) {
+                            activeFormats.value.italic = element.closest('em, i') !== null;
+                        }
+                    } catch (e2) {
+                        activeFormats.value.italic = false;
+                    }
+                }
+                
+                try {
+                    activeFormats.value.strike = doc.queryCommandState('strikeThrough') || false;
+                } catch (e) {
+                    try {
+                        const container = range.commonAncestorContainer;
+                        const element = container.nodeType === Node.TEXT_NODE 
+                            ? container.parentElement 
+                            : container;
+                        if (element) {
+                            activeFormats.value.strike = element.closest('s, strike') !== null;
+                        }
+                    } catch (e2) {
+                        activeFormats.value.strike = false;
+                    }
+                }
+                
+                // Check for bullet list
+                try {
+                    const container = range.commonAncestorContainer;
+                    const element = container.nodeType === Node.TEXT_NODE 
+                        ? container.parentElement 
+                        : container;
+                    if (element) {
+                        activeFormats.value.bullet = element.closest('ul, ol, li') !== null;
+                    } else {
+                        activeFormats.value.bullet = false;
+                    }
+                } catch (e) {
+                    activeFormats.value.bullet = false;
+                }
+            } catch (error) {
+                // If anything fails, clear all states
+                activeFormats.value = {
+                    bold: false,
+                    italic: false,
+                    strike: false,
+                    bullet: false,
+                };
+            }
+        };
+
         const updateRichSelection = () => {
             if (!props.allowRichText || !richInputRef.value) return;
             const frontWindow = getFrontWindow();
@@ -729,12 +845,15 @@ export default {
                     preRange.setEnd(range.endContainer, range.endOffset);
                     const caret = preRange.toString().length;
                     processMentionState(plainTextValue.value, caret);
+                    // Check format state after selection update
+                    checkFormatState();
                 }
             } else {
                 // On mobile, selection might be collapsed, still capture cursor position
                 captureCurrentRichRange();
                 const caret = plainTextValue.value.length;
                 processMentionState(plainTextValue.value, caret);
+                checkFormatState();
             }
         };
 
@@ -997,6 +1116,20 @@ export default {
                     adjustTextareaHeight();
                 }
             });
+            
+            // Add selection change listener for format state checking
+            if (props.allowRichText && typeof document !== 'undefined') {
+                const frontDoc = getFrontDocument();
+                frontDoc.addEventListener('selectionchange', checkFormatState);
+            }
+        });
+
+        onUnmounted(() => {
+            // Remove selection change listener
+            if (props.allowRichText && typeof document !== 'undefined') {
+                const frontDoc = getFrontDocument();
+                frontDoc.removeEventListener('selectionchange', checkFormatState);
+            }
         });
 
         const onEnterKey = event => {
@@ -1405,6 +1538,11 @@ export default {
                 }
 
                 handleRichInput();
+                
+                // Update format state after applying format
+                nextTick(() => {
+                    checkFormatState();
+                });
             };
             
             if (isMobile) {
@@ -1755,6 +1893,7 @@ export default {
             handleRichKeyDown,
             richPreviewHtml,
             handleToolbarTouch,
+            activeFormats,
         };
     },
 };
@@ -2018,6 +2157,16 @@ export default {
         &:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        // Active/selected state
+        &--active {
+            background: rgba(59, 130, 246, 0.15) !important;
+            color: #2563eb;
+            
+            &:hover:not(:disabled) {
+                background: rgba(59, 130, 246, 0.25) !important;
+            }
         }
 
         // Mobile-specific improvements
