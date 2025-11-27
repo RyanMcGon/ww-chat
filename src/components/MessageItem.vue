@@ -24,6 +24,8 @@
                     'ww-message-item__menu--visible': showMenu,
                     'ww-message-item__menu--mobile': isMobile
                 }"
+                @mouseenter="handleMenuMouseEnter"
+                @mouseleave="handleMenuMouseLeave"
             >
                 <button
                     class="ww-message-item__menu-button"
@@ -468,9 +470,12 @@ export default {
         const toggleMenu = () => {
             if (props.isPending) return;
             showMenuDropdown.value = !showMenuDropdown.value;
-            // On mobile, also show the menu button when dropdown is open
-            if (isMobile.value) {
-                showMenu.value = showMenuDropdown.value;
+            // Keep menu visible when dropdown is open (both desktop and mobile)
+            if (showMenuDropdown.value) {
+                showMenu.value = true;
+            } else if (!isMobile.value) {
+                // On desktop, hide menu when dropdown closes (unless hovering)
+                // We'll let mouseleave handle this
             }
         };
 
@@ -492,8 +497,13 @@ export default {
         const handleClickOutside = (event) => {
             if (showMenuDropdown.value && !event.target.closest('.ww-message-item__menu')) {
                 showMenuDropdown.value = false;
-                // On mobile, also hide the menu button
-                if (isMobile.value) {
+                // Hide menu button when dropdown closes
+                if (!isMobile.value) {
+                    // On desktop, check if we're still hovering
+                    // If not, hide the menu
+                    showMenu.value = false;
+                } else {
+                    // On mobile, always hide when dropdown closes
                     showMenu.value = false;
                 }
             }
@@ -517,8 +527,22 @@ export default {
         };
 
         const handleMouseLeave = () => {
-            // Only hide on hover for desktop
+            // Only hide on hover for desktop, but not if dropdown is open
+            if (!isMobile.value && !showMenuDropdown.value) {
+                showMenu.value = false;
+            }
+        };
+
+        const handleMenuMouseEnter = () => {
+            // Keep menu visible when hovering over it (desktop only)
             if (!isMobile.value) {
+                showMenu.value = true;
+            }
+        };
+
+        const handleMenuMouseLeave = () => {
+            // Hide menu when leaving it (desktop only), but not if dropdown is open
+            if (!isMobile.value && !showMenuDropdown.value) {
                 showMenu.value = false;
             }
         };
@@ -578,6 +602,8 @@ export default {
             handleEdit,
             handleDelete,
             isMobile,
+            handleMenuMouseEnter,
+            handleMenuMouseLeave,
         };
     },
 };
@@ -794,6 +820,11 @@ export default {
 
         &--visible {
             opacity: 1;
+            pointer-events: auto;
+        }
+        
+        // Always allow pointer events when visible or on mobile
+        &--mobile {
             pointer-events: auto;
         }
 
