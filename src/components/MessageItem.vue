@@ -785,36 +785,46 @@ export default {
 
     &__menu {
         position: absolute;
-        top: 10px; /* add a bit more breathing room from the top edge */
-        right: 10px; /* add a bit more breathing room from the right edge */
+        top: 8px;
+        right: 8px;
         opacity: 0;
-        transition: opacity 0.2s ease;
+        transition: opacity 0.2s ease, transform 0.2s ease;
         z-index: 10;
+        pointer-events: none;
 
         &--visible {
             opacity: 1;
+            pointer-events: auto;
         }
 
-        // On mobile, always show the menu button
+        // On mobile, show with very subtle styling
         &--mobile {
-            opacity: 1;
+            opacity: 0.3;
+            pointer-events: auto;
+            transition: opacity 0.15s ease, transform 0.15s ease;
         }
 
-        // On mobile, make it more visible
+        // On mobile, make it more visible when active
         @media (max-width: 768px) {
+            top: 8px;
+            right: 8px;
+            
             &--mobile {
-                opacity: 0.7; // Slightly transparent but visible
+                opacity: 0.25;
                 
-                &:active,
-                &--visible {
-                    opacity: 1;
+                &:hover {
+                    opacity: 0.4;
                 }
+            }
+            
+            &--mobile.ww-message-item__menu--visible {
+                opacity: 0.7;
             }
         }
     }
 
     &__menu-button {
-        background: rgba(0, 0, 0, 0.05);
+        background: rgba(0, 0, 0, 0.04);
         border: none;
         border-radius: 50%;
         width: 24px;
@@ -827,28 +837,59 @@ export default {
         padding: 0;
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
+        box-shadow: none;
 
         &:hover {
-            background: rgba(0, 0, 0, 0.1);
-            transform: scale(1.1);
+            background: rgba(0, 0, 0, 0.08);
+            transform: scale(1.05);
         }
 
         &:active {
             transform: scale(0.95);
-            background: rgba(0, 0, 0, 0.15);
+            background: rgba(0, 0, 0, 0.12);
         }
 
-        // Mobile-specific improvements
+        // Mobile-specific improvements - more subtle
         @media (max-width: 768px) {
-            width: 28px;
-            height: 28px;
-            background: rgba(0, 0, 0, 0.08);
-            min-width: 44px; // iOS recommended touch target
-            min-height: 44px;
-            padding: 8px; // Increase touch area
+            width: 24px;
+            height: 24px;
+            background: rgba(0, 0, 0, 0.03);
+            // Create larger touch target without making button bigger
+            &::before {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+            }
             
             &:active {
-                background: rgba(0, 0, 0, 0.15);
+                background: rgba(0, 0, 0, 0.08);
+                transform: scale(0.92);
+            }
+        }
+        
+        // For own messages, use lighter background
+        .ww-message-item--own & {
+            background: rgba(255, 255, 255, 0.3);
+            
+            &:hover {
+                background: rgba(255, 255, 255, 0.5);
+            }
+            
+            &:active {
+                background: rgba(255, 255, 255, 0.6);
+            }
+            
+            @media (max-width: 768px) {
+                background: rgba(255, 255, 255, 0.25);
+                
+                &:active {
+                    background: rgba(255, 255, 255, 0.4);
+                }
             }
         }
     }
@@ -857,10 +898,19 @@ export default {
         display: flex;
         align-items: center;
         justify-content: center;
+        position: relative;
+        z-index: 1; // Above the touch target overlay
 
         :deep(svg) {
             width: 100%;
             height: 100%;
+        }
+        
+        // On mobile, make icon slightly darker for better visibility
+        @media (max-width: 768px) {
+            :deep(svg) {
+                opacity: 0.7;
+            }
         }
     }
 
@@ -950,9 +1000,9 @@ export default {
             opacity: 1;
         }
 
-        // On mobile, ensure menu is always accessible
+        // On mobile, ensure menu is always accessible but subtle
         @media (max-width: 768px) {
-            padding-right: 45px; // Slightly more space for larger mobile button
+            padding-right: 38px; // Keep space minimal but adequate
         }
     }
 }
