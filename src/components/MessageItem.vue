@@ -285,6 +285,7 @@ export default {
         const editIconText = ref(null);
         const deleteIconText = ref(null);
         const isMobile = ref(false);
+        let hideMenuTimeout = null;
 
         const dateTimeOptions = inject(
             'dateTimeOptions',
@@ -512,30 +513,47 @@ export default {
         // Detect mobile device
         const detectMobile = () => {
             if (typeof window !== 'undefined') {
-                // Check for touch capability and screen size
-                const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                // More accurate mobile detection: primarily use screen width
+                // Many modern desktops have touch capability, so screen size is more reliable
                 const isSmallScreen = window.innerWidth <= 768;
-                isMobile.value = hasTouch && isSmallScreen;
+                // Consider it mobile if small screen, regardless of touch capability
+                // This ensures desktop touchscreens aren't treated as mobile
+                isMobile.value = isSmallScreen;
             }
         };
 
         const handleMouseEnter = () => {
-            // Only show on hover for desktop
-            if (!isMobile.value) {
-                showMenu.value = props.isOwnMessage && !props.isPending;
+            // Show menu on hover for desktop
+            if (!isMobile.value && props.isOwnMessage && !props.isPending) {
+                showMenu.value = true;
             }
         };
 
         const handleMouseLeave = () => {
-            // Only hide on hover for desktop, but not if dropdown is open
+            // Hide menu on leave for desktop, but keep it if dropdown is open
             if (!isMobile.value && !showMenuDropdown.value) {
-                showMenu.value = false;
+                // Clear any existing timeout
+                if (hideMenuTimeout) {
+                    clearTimeout(hideMenuTimeout);
+                }
+                // Small delay to allow moving to menu
+                hideMenuTimeout = setTimeout(() => {
+                    if (!showMenuDropdown.value) {
+                        showMenu.value = false;
+                    }
+                    hideMenuTimeout = null;
+                }, 150);
             }
         };
 
         const handleMenuMouseEnter = () => {
             // Keep menu visible when hovering over it (desktop only)
             if (!isMobile.value) {
+                // Clear any pending hide timeout
+                if (hideMenuTimeout) {
+                    clearTimeout(hideMenuTimeout);
+                    hideMenuTimeout = null;
+                }
                 showMenu.value = true;
             }
         };
@@ -822,17 +840,16 @@ export default {
             opacity: 1;
             pointer-events: auto;
         }
-        
-        // Always allow pointer events when visible or on mobile
-        &--mobile {
-            pointer-events: auto;
-        }
 
-        // On mobile, show with very subtle styling
+        // On mobile, show with very subtle styling and always allow interaction
         &--mobile {
             opacity: 0.3;
             pointer-events: auto;
             transition: opacity 0.15s ease, transform 0.15s ease;
+            
+            &.ww-message-item__menu--visible {
+                opacity: 0.7;
+            }
         }
 
         // On mobile, make it more visible when active
@@ -1027,8 +1044,9 @@ export default {
         /* reserve space on the right so the icon never overlaps the text */
         padding-right: 40px;
 
+        // Desktop hover - show menu on hover (but JS handles this now)
         &:hover .ww-message-item__menu:not(.ww-message-item__menu--mobile) {
-            opacity: 1;
+            // This is a fallback, but JS handles the visibility
         }
 
         // On mobile, ensure menu is always accessible but subtle
