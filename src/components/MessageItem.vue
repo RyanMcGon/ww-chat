@@ -519,13 +519,19 @@ export default {
                 // Consider it mobile if small screen, regardless of touch capability
                 // This ensures desktop touchscreens aren't treated as mobile
                 isMobile.value = isSmallScreen;
+            } else {
+                // Default to desktop if window is not available
+                isMobile.value = false;
             }
         };
 
         const handleMouseEnter = () => {
-            // Show menu on hover for desktop
-            if (!isMobile.value && props.isOwnMessage && !props.isPending) {
-                showMenu.value = true;
+            // Show menu on hover
+            // Default to desktop behavior (show menu) unless explicitly mobile
+            if (props.isOwnMessage && !props.isPending) {
+                // Show menu unless we're definitely on mobile
+                // Default to showing on desktop
+                showMenu.value = !isMobile.value;
             }
         };
 
@@ -569,6 +575,7 @@ export default {
             if (typeof document !== 'undefined') {
                 document.addEventListener('click', handleClickOutside);
             }
+            // Initialize mobile detection immediately
             detectMobile();
             // Re-detect on resize
             if (typeof window !== 'undefined') {
@@ -851,6 +858,15 @@ export default {
                 opacity: 0.7;
             }
         }
+        
+        // Ensure menu is visible on desktop hover (CSS fallback)
+        // This is a backup in case JS doesn't work
+        @media (min-width: 769px) {
+            .ww-message-item__content:hover &:not(.ww-message-item__menu--mobile) {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
 
         // On mobile, make it more visible when active
         @media (max-width: 768px) {
@@ -1044,9 +1060,12 @@ export default {
         /* reserve space on the right so the icon never overlaps the text */
         padding-right: 40px;
 
-        // Desktop hover - show menu on hover (but JS handles this now)
-        &:hover .ww-message-item__menu:not(.ww-message-item__menu--mobile) {
-            // This is a fallback, but JS handles the visibility
+        // Desktop hover - CSS fallback to show menu on hover
+        @media (min-width: 769px) {
+            &:hover .ww-message-item__menu:not(.ww-message-item__menu--mobile) {
+                opacity: 1 !important;
+                pointer-events: auto !important;
+            }
         }
 
         // On mobile, ensure menu is always accessible but subtle
