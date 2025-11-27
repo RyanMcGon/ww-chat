@@ -49,7 +49,11 @@
             </div>
         </div>
 
-        <div class="ww-chat-input-area__input-row" :style="{ alignItems: alignItemsCss }">
+        <div 
+            class="ww-chat-input-area__input-row" 
+            :class="{ 'ww-chat-input-area__input-row--editing': editingMessage }"
+            :style="{ alignItems: alignItemsCss }"
+        >
             <!-- Attachment button -->
             <label
                 v-if="allowAttachments && !editingMessage"
@@ -1774,6 +1778,20 @@ export default {
         align-items: flex-end;
         gap: 12px;
         width: 100%;
+        min-width: 0; // Allow flex items to shrink below their content size
+
+        // On mobile, ensure buttons are always visible when editing
+        @media (max-width: 768px) {
+            gap: 8px;
+            
+            // When editing, make input container shrinkable
+            &--editing {
+                .ww-chat-input-area__input-container {
+                    min-width: 0;
+                    flex-shrink: 1;
+                }
+            }
+        }
     }
 
     &__attachments {
@@ -1941,6 +1959,14 @@ export default {
         display: flex;
         flex-direction: column;
         align-items: stretch;
+        min-width: 0; // Allow container to shrink below content size
+        overflow: hidden; // Prevent content from overflowing
+
+        // On mobile when editing, ensure it can shrink
+        @media (max-width: 768px) {
+            min-width: 0;
+            flex-shrink: 1;
+        }
     }
 
     &__toolbar {
@@ -2176,6 +2202,8 @@ export default {
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         flex-shrink: 0;
         align-self: auto;
+        position: relative; // Ensure it stays in layout flow
+        z-index: 1; // Ensure it's above other elements
 
         &:hover:not(:disabled) {
             background: var(--btn-hover-bg, linear-gradient(135deg, #2563eb, #1d4ed8));
@@ -2201,6 +2229,12 @@ export default {
             color: #94a3b8;
             box-shadow: none;
         }
+
+        // Mobile-specific: ensure button is always visible
+        @media (max-width: 768px) {
+            flex-shrink: 0;
+            min-width: 42px; // Ensure minimum size
+        }
     }
 
     &__cancel-btn {
@@ -2217,7 +2251,7 @@ export default {
         font-weight: 500;
         transition: all 0.2s ease;
         flex-shrink: 0;
-        margin-right: 8px;
+        margin-right: 0; // Remove margin, gap handles spacing
 
         &:hover:not(:disabled) {
             background: #f1f5f9;
@@ -2232,6 +2266,13 @@ export default {
         &:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        // Mobile-specific adjustments
+        @media (max-width: 768px) {
+            padding: 8px 12px;
+            font-size: 0.8125rem;
+            white-space: nowrap;
         }
     }
 
