@@ -727,9 +727,6 @@ export default {
         const checkFormatState = () => {
             if (!props.allowRichText || !richInputRef.value) return;
             
-            // Don't check format state if mentions dropdown is open (to avoid interference)
-            if (showMentionsDropdown.value) return;
-            
             const doc = getFrontDocument();
             
             try {
@@ -851,20 +848,24 @@ export default {
                     preRange.setEnd(range.endContainer, range.endOffset);
                     const caret = preRange.toString().length;
                     processMentionState(plainTextValue.value, caret);
-                    // Check format state after selection update, but only if mentions dropdown is not open
-                    if (!showMentionsDropdown.value) {
-                        checkFormatState();
-                    }
+                    // Check format state after selection update (with small delay to let mentions process first)
+                    nextTick(() => {
+                        if (!showMentionsDropdown.value) {
+                            checkFormatState();
+                        }
+                    });
                 }
             } else {
                 // On mobile, selection might be collapsed, still capture cursor position
                 captureCurrentRichRange();
                 const caret = plainTextValue.value.length;
                 processMentionState(plainTextValue.value, caret);
-                // Check format state after selection update, but only if mentions dropdown is not open
-                if (!showMentionsDropdown.value) {
-                    checkFormatState();
-                }
+                // Check format state after selection update (with small delay to let mentions process first)
+                nextTick(() => {
+                    if (!showMentionsDropdown.value) {
+                        checkFormatState();
+                    }
+                });
             }
         };
 
@@ -1137,13 +1138,13 @@ export default {
                     if (formatCheckTimeout) {
                         clearTimeout(formatCheckTimeout);
                     }
-                    // Only check if mentions dropdown is not open
-                    if (!showMentionsDropdown.value) {
-                        formatCheckTimeout = setTimeout(() => {
+                    // Debounce the check and only run if mentions dropdown is not open
+                    formatCheckTimeout = setTimeout(() => {
+                        if (!showMentionsDropdown.value && richInputRef.value) {
                             checkFormatState();
-                            formatCheckTimeout = null;
-                        }, 100);
-                    }
+                        }
+                        formatCheckTimeout = null;
+                    }, 150);
                 };
                 frontDoc.addEventListener('selectionchange', debouncedCheckFormatState);
             }
@@ -1365,12 +1366,12 @@ export default {
             processMentionState(plainText, caret);
             captureCurrentRichRange();
             
-            // Check format state after processing input, but only if mentions dropdown is not open
-            if (!showMentionsDropdown.value) {
-                nextTick(() => {
+            // Check format state after processing input (with delay to let mentions process first)
+            nextTick(() => {
+                if (!showMentionsDropdown.value) {
                     checkFormatState();
-                });
-            }
+                }
+            });
         };
 
         const handleRichKeyDown = (event) => {
@@ -1384,12 +1385,21 @@ export default {
         };
 
         const getCaretOffsetFromRich = () => {
+            if (!richInputRef.value) {
+                return plainTextValue.value.length;
+            }
             const win = getFrontWindow();
             const selection = win.getSelection();
-            if (!selection || selection.rangeCount === 0 || !richInputRef.value) {
+            if (!selection || selection.rangeCount === 0) {
                 return plainTextValue.value.length;
             }
             const range = selection.getRangeAt(0);
+            
+            // Check if selection is within our rich input
+            if (!richInputRef.value.contains(range.commonAncestorContainer)) {
+                return plainTextValue.value.length;
+            }
+            
             const preRange = range.cloneRange();
             preRange.selectNodeContents(richInputRef.value);
             preRange.setEnd(range.endContainer, range.endOffset);
@@ -1576,10 +1586,12 @@ export default {
 
                 handleRichInput();
                 
-                // Update format state after applying format
-                nextTick(() => {
-                    checkFormatState();
-                });
+                // Update format state after applying format (with delay to let input process)
+                setTimeout(() => {
+                    if (!showMentionsDropdown.value) {
+                        checkFormatState();
+                    }
+                }, 50);
             };
             
             if (isMobile) {
