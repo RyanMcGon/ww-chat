@@ -1353,7 +1353,14 @@ export default {
         };
 
         const handleRichInput = () => {
-            if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
+            if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) {
+                console.log('[Mentions] handleRichInput skipped', {
+                    allowRichText: props.allowRichText,
+                    hasRef: !!richInputRef.value,
+                    isSyncing: isSyncingRich.value
+                });
+                return;
+            }
             
             // Only clean up mention spans if we detect they have extra content
             // This prevents interference with normal typing
@@ -1429,13 +1436,26 @@ export default {
                               (event.shiftKey && (event.key === '2' || event.code === 'Digit2'));
             
             if (isAtSymbol) {
+                console.log('[Mentions] @ symbol detected in keydown', { key: event.key, code: event.code, shiftKey: event.shiftKey });
+                
                 // Use multiple attempts to catch @ in the DOM
                 // The keydown event fires before the character is inserted, so we need to wait
                 const checkForAt = (attempts = 0) => {
-                    if (!richInputRef.value || isSyncingRich.value) return;
+                    if (!richInputRef.value || isSyncingRich.value) {
+                        console.log('[Mentions] Skipping check - no ref or syncing', { hasRef: !!richInputRef.value, isSyncing: isSyncingRich.value });
+                        return;
+                    }
                     
                     const plainTextFromContent = richInputRef.value.textContent || '';
                     const caret = getCaretOffsetFromRich();
+                    
+                    console.log('[Mentions] Checking for @', { 
+                        attempt: attempts, 
+                        text: plainTextFromContent, 
+                        hasAt: plainTextFromContent.includes('@'),
+                        caret,
+                        participants: props.participants?.length || 0
+                    });
                     
                     // Check if @ is in the text
                     if (plainTextFromContent.includes('@') || attempts < 3) {
@@ -1533,6 +1553,17 @@ export default {
             const textBeforeCursor = safeText.substring(0, clampedCursorPos);
             const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
+            console.log('[Mentions] processMentionState', {
+                text: safeText,
+                cursorPos,
+                clampedCursorPos,
+                textBeforeCursor,
+                lastAtIndex,
+                hasAt: textBeforeCursor.includes('@'),
+                participants: props.participants?.length || 0,
+                availableParticipants: availableParticipants.value.length
+            });
+
             if (lastAtIndex !== -1) {
                 const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
                 // Check if there's no space after @ (meaning we're still typing the mention)
@@ -1544,6 +1575,12 @@ export default {
                     // The dropdown will show "No participants found" if needed
                     showMentionsDropdown.value = true;
                     selectedMentionIndex.value = 0;
+                    console.log('[Mentions] Showing dropdown', {
+                        mentionStartPos: mentionStartPos.value,
+                        mentionSearchText: mentionSearchText.value,
+                        showMentionsDropdown: showMentionsDropdown.value,
+                        filteredParticipants: filteredParticipants.value.length
+                    });
                     checkRemovedMentions();
                     return;
                 }
@@ -1551,6 +1588,7 @@ export default {
 
             // No @ found or space after @, hide dropdown
             if (showMentionsDropdown.value) {
+                console.log('[Mentions] Hiding dropdown - no @ found or space after @');
                 showMentionsDropdown.value = false;
             }
             mentionSearchText.value = '';
