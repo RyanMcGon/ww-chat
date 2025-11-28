@@ -1001,6 +1001,10 @@ export default {
 
         const syncRichEditor = (preserveCaret = true) => {
             if (!props.allowRichText || !richInputRef.value) return;
+            
+            // Don't sync if mentions dropdown is open - user is actively typing mentions
+            if (showMentionsDropdown.value) return;
+            
             const caret = preserveCaret ? getCaretOffsetFromRich() : plainTextValue.value.length;
             isSyncingRich.value = true;
             const html = formatRichText(
@@ -1364,38 +1368,33 @@ export default {
                 cleanupMentionSpans();
             }
             
-            // Use nextTick to ensure DOM is updated before processing mentions
-            // This is critical for detecting @ symbol immediately after typing
-            nextTick(() => {
-                if (!richInputRef.value || isSyncingRich.value) return;
-                
-                // Get plain text directly from textContent (more reliable for mentions)
-                // This ensures @ symbols are preserved and positions match
-                const plainTextFromContent = richInputRef.value.textContent || '';
-                
-                // Get caret position based on textContent (matches plaintext)
-                const caret = getCaretOffsetFromRich();
-                
-                // Also convert to markdown for storage
-                const html = richInputRef.value.innerHTML;
-                const { markdown, plainText: plainTextFromMarkdown } = convertHtmlToMarkdown(html);
-                inputValue.value = markdown;
-                
-                // Use textContent for mention detection (more accurate)
-                // But store the markdown-converted version for consistency
-                plainTextValue.value = plainTextFromMarkdown;
-                
-                // Process mentions using textContent (preserves @ symbols accurately)
-                processMentionState(plainTextFromContent, caret);
-                captureCurrentRichRange();
-                
-                // Check format state after a short delay (let mentions process first)
-                setTimeout(() => {
-                    if (!showMentionsDropdown.value && richInputRef.value) {
-                        checkFormatState();
-                    }
-                }, 50);
-            });
+            // Get plain text directly from textContent (more reliable for mentions)
+            // This ensures @ symbols are preserved and positions match
+            const plainTextFromContent = richInputRef.value.textContent || '';
+            
+            // Get caret position based on textContent (matches plaintext)
+            const caret = getCaretOffsetFromRich();
+            
+            // Also convert to markdown for storage
+            const html = richInputRef.value.innerHTML;
+            const { markdown, plainText: plainTextFromMarkdown } = convertHtmlToMarkdown(html);
+            inputValue.value = markdown;
+            
+            // Use textContent for both mention detection AND plainTextValue
+            // This ensures consistency - @ symbols are preserved accurately
+            plainTextValue.value = plainTextFromContent.replace(/\u00a0/g, ' ');
+            
+            // Process mentions using textContent (preserves @ symbols accurately)
+            // Use nextTick to ensure DOM is fully updated, but process immediately for @ detection
+            processMentionState(plainTextFromContent, caret);
+            captureCurrentRichRange();
+            
+            // Check format state after a short delay (let mentions process first)
+            setTimeout(() => {
+                if (!showMentionsDropdown.value && richInputRef.value) {
+                    checkFormatState();
+                }
+            }, 50);
         };
 
         const handleRichKeyDown = (event) => {
