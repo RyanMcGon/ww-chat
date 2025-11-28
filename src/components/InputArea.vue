@@ -549,6 +549,8 @@ export default {
             strike: false,
             bullet: false,
         });
+        let formatCheckTimeout = null;
+        let debouncedCheckFormatState = null;
 
         const richSizingStyle = computed(() => ({
             '--rich-input-min-height': props.inputHeight || '38px',
@@ -724,6 +726,10 @@ export default {
 
         const checkFormatState = () => {
             if (!props.allowRichText || !richInputRef.value) return;
+            
+            // Don't check format state if mentions dropdown is open (to avoid interference)
+            if (showMentionsDropdown.value) return;
+            
             const doc = getFrontDocument();
             
             try {
@@ -845,15 +851,20 @@ export default {
                     preRange.setEnd(range.endContainer, range.endOffset);
                     const caret = preRange.toString().length;
                     processMentionState(plainTextValue.value, caret);
-                    // Check format state after selection update
-                    checkFormatState();
+                    // Check format state after selection update, but only if mentions dropdown is not open
+                    if (!showMentionsDropdown.value) {
+                        checkFormatState();
+                    }
                 }
             } else {
                 // On mobile, selection might be collapsed, still capture cursor position
                 captureCurrentRichRange();
                 const caret = plainTextValue.value.length;
                 processMentionState(plainTextValue.value, caret);
-                checkFormatState();
+                // Check format state after selection update, but only if mentions dropdown is not open
+                if (!showMentionsDropdown.value) {
+                    checkFormatState();
+                }
             }
         };
 
@@ -1118,17 +1129,36 @@ export default {
             });
             
             // Add selection change listener for format state checking
+            // Use a debounced version to avoid interfering with mentions
             if (props.allowRichText && typeof document !== 'undefined') {
                 const frontDoc = getFrontDocument();
-                frontDoc.addEventListener('selectionchange', checkFormatState);
+                debouncedCheckFormatState = () => {
+                    // Clear any pending check
+                    if (formatCheckTimeout) {
+                        clearTimeout(formatCheckTimeout);
+                    }
+                    // Only check if mentions dropdown is not open
+                    if (!showMentionsDropdown.value) {
+                        formatCheckTimeout = setTimeout(() => {
+                            checkFormatState();
+                            formatCheckTimeout = null;
+                        }, 100);
+                    }
+                };
+                frontDoc.addEventListener('selectionchange', debouncedCheckFormatState);
             }
         });
 
         onUnmounted(() => {
             // Remove selection change listener
-            if (props.allowRichText && typeof document !== 'undefined') {
+            if (props.allowRichText && typeof document !== 'undefined' && debouncedCheckFormatState) {
                 const frontDoc = getFrontDocument();
-                frontDoc.removeEventListener('selectionchange', checkFormatState);
+                frontDoc.removeEventListener('selectionchange', debouncedCheckFormatState);
+            }
+            // Clear any pending timeout
+            if (formatCheckTimeout) {
+                clearTimeout(formatCheckTimeout);
+                formatCheckTimeout = null;
             }
         });
 
@@ -1334,6 +1364,13 @@ export default {
             plainTextValue.value = plainText;
             processMentionState(plainText, caret);
             captureCurrentRichRange();
+            
+            // Check format state after processing input, but only if mentions dropdown is not open
+            if (!showMentionsDropdown.value) {
+                nextTick(() => {
+                    checkFormatState();
+                });
+            }
         };
 
         const handleRichKeyDown = (event) => {
