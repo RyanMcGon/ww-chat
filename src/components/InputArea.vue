@@ -1005,13 +1005,6 @@ export default {
             // Don't sync if mentions dropdown is open - user is actively typing mentions
             if (showMentionsDropdown.value) return;
             
-            // Don't sync if we detect @ in the current text - user might be typing a mention
-            const currentText = richInputRef.value.textContent || '';
-            if (currentText.includes('@') && mentionStartPos.value === -1) {
-                // @ detected but not yet processed, skip sync to avoid interference
-                return;
-            }
-            
             const caret = preserveCaret ? getCaretOffsetFromRich() : plainTextValue.value.length;
             isSyncingRich.value = true;
             const html = formatRichText(
@@ -1353,14 +1346,7 @@ export default {
         };
 
         const handleRichInput = () => {
-            if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) {
-                console.log('[Mentions] handleRichInput skipped', {
-                    allowRichText: props.allowRichText,
-                    hasRef: !!richInputRef.value,
-                    isSyncing: isSyncingRich.value
-                });
-                return;
-            }
+            if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
             
             // Only clean up mention spans if we detect they have extra content
             // This prevents interference with normal typing
@@ -1384,29 +1370,14 @@ export default {
             
             // Get plain text directly from textContent (more reliable for mentions)
             // This ensures @ symbols are preserved and positions match
-            let plainTextFromContent = richInputRef.value.textContent || '';
-            
-            console.log('[Mentions] handleRichInput - textContent', {
-                textContent: plainTextFromContent,
-                innerHTML: richInputRef.value.innerHTML,
-                hasAt: plainTextFromContent.includes('@')
-            });
-            
-            // If textContent is empty but innerHTML has content, the @ might be in HTML tags
-            // Try to extract text from innerHTML as fallback
-            if (!plainTextFromContent && richInputRef.value.innerHTML) {
-                const tempDiv = getFrontDocument().createElement('div');
-                tempDiv.innerHTML = richInputRef.value.innerHTML;
-                plainTextFromContent = tempDiv.textContent || '';
-                console.log('[Mentions] Extracted from innerHTML', { plainTextFromContent });
-            }
+            const plainTextFromContent = richInputRef.value.textContent || '';
             
             // Get caret position based on textContent (matches plaintext)
             const caret = getCaretOffsetFromRich();
             
             // Also convert to markdown for storage
             const html = richInputRef.value.innerHTML;
-            const { markdown, plainText: plainTextFromMarkdown } = convertHtmlToMarkdown(html);
+            const { markdown } = convertHtmlToMarkdown(html);
             inputValue.value = markdown;
             
             // Use textContent for both mention detection AND plainTextValue
@@ -1414,8 +1385,14 @@ export default {
             plainTextValue.value = plainTextFromContent.replace(/\u00a0/g, ' ');
             
             // Process mentions using textContent (preserves @ symbols accurately)
-            // Process immediately to catch @ symbol as soon as it's typed
-            processMentionState(plainTextFromContent, caret);
+            // Use nextTick to ensure DOM is fully updated
+            nextTick(() => {
+                if (!richInputRef.value || isSyncingRich.value) return;
+                const currentText = richInputRef.value.textContent || '';
+                const currentCaret = getCaretOffsetFromRich();
+                processMentionState(currentText, currentCaret);
+            });
+            
             captureCurrentRichRange();
             
             // Check format state after a short delay (let mentions process first)
@@ -1427,13 +1404,6 @@ export default {
         };
 
         const handleRichKeyDown = (event) => {
-            console.log('[Mentions] handleRichKeyDown called', { 
-                key: event.key, 
-                code: event.code, 
-                shiftKey: event.shiftKey,
-                target: event.target 
-            });
-            
             if (event.key === 'Enter') {
                 onEnterKey(event);
                 return;
@@ -1441,48 +1411,6 @@ export default {
             if (showMentionsDropdown.value) {
                 handleKeyDown(event);
                 return;
-            }
-            
-            // Detect @ symbol immediately when typed to trigger mention dropdown
-            // This ensures mentions work even if input event is delayed
-            // @ can be typed as Shift+2 on most keyboards, so check both key and code
-            const isAtSymbol = event.key === '@' || 
-                              (event.shiftKey && (event.key === '2' || event.code === 'Digit2'));
-            
-            if (isAtSymbol) {
-                console.log('[Mentions] @ symbol detected in keydown', { key: event.key, code: event.code, shiftKey: event.shiftKey });
-                
-                // Use multiple attempts to catch @ in the DOM
-                // The keydown event fires before the character is inserted, so we need to wait
-                const checkForAt = (attempts = 0) => {
-                    if (!richInputRef.value || isSyncingRich.value) {
-                        console.log('[Mentions] Skipping check - no ref or syncing', { hasRef: !!richInputRef.value, isSyncing: isSyncingRich.value });
-                        return;
-                    }
-                    
-                    const plainTextFromContent = richInputRef.value.textContent || '';
-                    const caret = getCaretOffsetFromRich();
-                    
-                    console.log('[Mentions] Checking for @', { 
-                        attempt: attempts, 
-                        text: plainTextFromContent, 
-                        hasAt: plainTextFromContent.includes('@'),
-                        caret,
-                        participants: props.participants?.length || 0
-                    });
-                    
-                    // Check if @ is in the text
-                    if (plainTextFromContent.includes('@') || attempts < 3) {
-                        processMentionState(plainTextFromContent, caret);
-                        if (!plainTextFromContent.includes('@') && attempts < 3) {
-                            // @ not found yet, try again after a short delay
-                            setTimeout(() => checkForAt(attempts + 1), 20);
-                        }
-                    }
-                };
-                
-                // Start checking immediately and retry if needed
-                setTimeout(() => checkForAt(0), 10);
             }
         };
 
@@ -1567,17 +1495,6 @@ export default {
             const textBeforeCursor = safeText.substring(0, clampedCursorPos);
             const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-            console.log('[Mentions] processMentionState', {
-                text: safeText,
-                cursorPos,
-                clampedCursorPos,
-                textBeforeCursor,
-                lastAtIndex,
-                hasAt: textBeforeCursor.includes('@'),
-                participants: props.participants?.length || 0,
-                availableParticipants: availableParticipants.value.length
-            });
-
             if (lastAtIndex !== -1) {
                 const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
                 // Check if there's no space after @ (meaning we're still typing the mention)
@@ -1585,16 +1502,8 @@ export default {
                 if (textAfterAt === '' || !/\s/.test(textAfterAt)) {
                     mentionStartPos.value = lastAtIndex;
                     mentionSearchText.value = textAfterAt;
-                    // Always show dropdown when @ is detected, even if no participants yet
-                    // The dropdown will show "No participants found" if needed
                     showMentionsDropdown.value = true;
                     selectedMentionIndex.value = 0;
-                    console.log('[Mentions] Showing dropdown', {
-                        mentionStartPos: mentionStartPos.value,
-                        mentionSearchText: mentionSearchText.value,
-                        showMentionsDropdown: showMentionsDropdown.value,
-                        filteredParticipants: filteredParticipants.value.length
-                    });
                     checkRemovedMentions();
                     return;
                 }
@@ -1602,7 +1511,6 @@ export default {
 
             // No @ found or space after @, hide dropdown
             if (showMentionsDropdown.value) {
-                console.log('[Mentions] Hiding dropdown - no @ found or space after @');
                 showMentionsDropdown.value = false;
             }
             mentionSearchText.value = '';
