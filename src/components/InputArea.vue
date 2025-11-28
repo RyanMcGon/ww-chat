@@ -1364,32 +1364,38 @@ export default {
                 cleanupMentionSpans();
             }
             
-            // Get plain text directly from textContent (more reliable for mentions)
-            // This ensures @ symbols are preserved and positions match
-            const plainTextFromContent = richInputRef.value.textContent || '';
-            
-            // Get caret position based on textContent (matches plaintext)
-            const caret = getCaretOffsetFromRich();
-            
-            // Also convert to markdown for storage
-            const html = richInputRef.value.innerHTML;
-            const { markdown, plainText: plainTextFromMarkdown } = convertHtmlToMarkdown(html);
-            inputValue.value = markdown;
-            
-            // Use textContent for mention detection (more accurate)
-            // But store the markdown-converted version for consistency
-            plainTextValue.value = plainTextFromMarkdown;
-            
-            // Process mentions using textContent (preserves @ symbols accurately)
-            processMentionState(plainTextFromContent, caret);
-            captureCurrentRichRange();
-            
-            // Check format state after a short delay (let mentions process first)
-            setTimeout(() => {
-                if (!showMentionsDropdown.value && richInputRef.value) {
-                    checkFormatState();
-                }
-            }, 50);
+            // Use nextTick to ensure DOM is updated before processing mentions
+            // This is critical for detecting @ symbol immediately after typing
+            nextTick(() => {
+                if (!richInputRef.value || isSyncingRich.value) return;
+                
+                // Get plain text directly from textContent (more reliable for mentions)
+                // This ensures @ symbols are preserved and positions match
+                const plainTextFromContent = richInputRef.value.textContent || '';
+                
+                // Get caret position based on textContent (matches plaintext)
+                const caret = getCaretOffsetFromRich();
+                
+                // Also convert to markdown for storage
+                const html = richInputRef.value.innerHTML;
+                const { markdown, plainText: plainTextFromMarkdown } = convertHtmlToMarkdown(html);
+                inputValue.value = markdown;
+                
+                // Use textContent for mention detection (more accurate)
+                // But store the markdown-converted version for consistency
+                plainTextValue.value = plainTextFromMarkdown;
+                
+                // Process mentions using textContent (preserves @ symbols accurately)
+                processMentionState(plainTextFromContent, caret);
+                captureCurrentRichRange();
+                
+                // Check format state after a short delay (let mentions process first)
+                setTimeout(() => {
+                    if (!showMentionsDropdown.value && richInputRef.value) {
+                        checkFormatState();
+                    }
+                }, 50);
+            });
         };
 
         const handleRichKeyDown = (event) => {
@@ -1399,6 +1405,23 @@ export default {
             }
             if (showMentionsDropdown.value) {
                 handleKeyDown(event);
+                return;
+            }
+            
+            // Detect @ symbol immediately when typed to trigger mention dropdown
+            // This ensures mentions work even if input event is delayed
+            // @ can be typed as Shift+2 on most keyboards, so check both key and code
+            const isAtSymbol = event.key === '@' || 
+                              (event.shiftKey && (event.key === '2' || event.code === 'Digit2'));
+            
+            if (isAtSymbol) {
+                // Use nextTick to ensure @ is in the DOM before processing
+                nextTick(() => {
+                    if (!richInputRef.value || isSyncingRich.value) return;
+                    const plainTextFromContent = richInputRef.value.textContent || '';
+                    const caret = getCaretOffsetFromRich();
+                    processMentionState(plainTextFromContent, caret);
+                });
             }
         };
 
