@@ -1,6 +1,6 @@
 # WW-CHAT
 
-A modern, feature-rich chat component for WeWeb with support for mentions,
+A modern,test feature-rich chat component for WeWeb with support for mentions,
 attachments, real-time messaging, and customizable styling.
 
 ## Features
