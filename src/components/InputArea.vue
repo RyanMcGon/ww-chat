@@ -1038,10 +1038,9 @@ export default {
                 const currentValue = inputValue.value || '';
                 const newValueStr = newValue || '';
                 
-                // If the user is actively typing and values match, don't sync (to avoid interference)
-                // Also check if the new value is different from current (external change)
-                if (isFocused && currentValue === newValueStr) {
-                    return; // User is typing, values match, skip sync
+                // If the user is actively typing, NEVER sync - this prevents interference with mentions
+                if (isFocused) {
+                    return; // User is typing, skip sync completely
                 }
                 
                 // Only update if value actually changed
@@ -1385,13 +1384,8 @@ export default {
             plainTextValue.value = plainTextFromContent.replace(/\u00a0/g, ' ');
             
             // Process mentions using textContent (preserves @ symbols accurately)
-            // Use nextTick to ensure DOM is fully updated
-            nextTick(() => {
-                if (!richInputRef.value || isSyncingRich.value) return;
-                const currentText = richInputRef.value.textContent || '';
-                const currentCaret = getCaretOffsetFromRich();
-                processMentionState(currentText, currentCaret);
-            });
+            // Process immediately - the @ should be in textContent by now
+            processMentionState(plainTextFromContent, caret);
             
             captureCurrentRichRange();
             
