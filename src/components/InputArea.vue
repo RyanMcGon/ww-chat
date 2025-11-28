@@ -1386,12 +1386,19 @@ export default {
             // This ensures @ symbols are preserved and positions match
             let plainTextFromContent = richInputRef.value.textContent || '';
             
+            console.log('[Mentions] handleRichInput - textContent', {
+                textContent: plainTextFromContent,
+                innerHTML: richInputRef.value.innerHTML,
+                hasAt: plainTextFromContent.includes('@')
+            });
+            
             // If textContent is empty but innerHTML has content, the @ might be in HTML tags
             // Try to extract text from innerHTML as fallback
             if (!plainTextFromContent && richInputRef.value.innerHTML) {
                 const tempDiv = getFrontDocument().createElement('div');
                 tempDiv.innerHTML = richInputRef.value.innerHTML;
                 plainTextFromContent = tempDiv.textContent || '';
+                console.log('[Mentions] Extracted from innerHTML', { plainTextFromContent });
             }
             
             // Get caret position based on textContent (matches plaintext)
@@ -1420,6 +1427,13 @@ export default {
         };
 
         const handleRichKeyDown = (event) => {
+            console.log('[Mentions] handleRichKeyDown called', { 
+                key: event.key, 
+                code: event.code, 
+                shiftKey: event.shiftKey,
+                target: event.target 
+            });
+            
             if (event.key === 'Enter') {
                 onEnterKey(event);
                 return;
