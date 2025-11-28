@@ -151,6 +151,7 @@
                     @keyup="updateRichSelection"
                     @mouseup="updateRichSelection"
                     @touchend="updateRichSelection"
+                    @paste="handleRichInput"
                 ></div>
 
                 <textarea
@@ -1367,34 +1368,13 @@ export default {
                 cleanupMentionSpans();
             }
             
-            // Get plain text directly from textContent (more reliable for mentions)
-            // This ensures @ symbols are preserved and positions match
-            const plainTextFromContent = richInputRef.value.textContent || '';
-            
-            // Get caret position based on textContent (matches plaintext)
             const caret = getCaretOffsetFromRich();
-            
-            // Also convert to markdown for storage
             const html = richInputRef.value.innerHTML;
-            const { markdown } = convertHtmlToMarkdown(html);
+            const { markdown, plainText } = convertHtmlToMarkdown(html);
             inputValue.value = markdown;
-            
-            // Use textContent for both mention detection AND plainTextValue
-            // This ensures consistency - @ symbols are preserved accurately
-            plainTextValue.value = plainTextFromContent.replace(/\u00a0/g, ' ');
-            
-            // Process mentions using textContent (preserves @ symbols accurately)
-            // Process immediately - the @ should be in textContent by now
-            processMentionState(plainTextFromContent, caret);
-            
+            plainTextValue.value = plainText;
+            processMentionState(plainText, caret);
             captureCurrentRichRange();
-            
-            // Check format state after a short delay (let mentions process first)
-            setTimeout(() => {
-                if (!showMentionsDropdown.value && richInputRef.value) {
-                    checkFormatState();
-                }
-            }, 50);
         };
 
         const handleRichKeyDown = (event) => {
@@ -1479,21 +1459,13 @@ export default {
 
         const processMentionState = (text, cursorPos) => {
             const safeText = text ?? '';
-            // Ensure plainTextValue is updated
-            if (plainTextValue.value !== safeText) {
-                plainTextValue.value = safeText;
-            }
-            
-            // Clamp cursor position to valid range
-            const clampedCursorPos = Math.max(0, Math.min(cursorPos, safeText.length));
-            const textBeforeCursor = safeText.substring(0, clampedCursorPos);
+            plainTextValue.value = safeText;
+            const textBeforeCursor = safeText.substring(0, cursorPos);
             const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
             if (lastAtIndex !== -1) {
                 const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-                // Check if there's no space after @ (meaning we're still typing the mention)
-                // Also allow empty string right after @
-                if (textAfterAt === '' || !/\s/.test(textAfterAt)) {
+                if (!/\s/.test(textAfterAt)) {
                     mentionStartPos.value = lastAtIndex;
                     mentionSearchText.value = textAfterAt;
                     showMentionsDropdown.value = true;
@@ -1503,10 +1475,7 @@ export default {
                 }
             }
 
-            // No @ found or space after @, hide dropdown
-            if (showMentionsDropdown.value) {
-                showMentionsDropdown.value = false;
-            }
+            showMentionsDropdown.value = false;
             mentionSearchText.value = '';
             mentionStartPos.value = -1;
             checkRemovedMentions();
