@@ -849,11 +849,11 @@ export default {
                     const caret = preRange.toString().length;
                     processMentionState(plainTextValue.value, caret);
                     // Check format state after selection update (with small delay to let mentions process first)
-                    nextTick(() => {
-                        if (!showMentionsDropdown.value) {
+                    setTimeout(() => {
+                        if (!showMentionsDropdown.value && richInputRef.value) {
                             checkFormatState();
                         }
-                    });
+                    }, 50);
                 }
             } else {
                 // On mobile, selection might be collapsed, still capture cursor position
@@ -861,11 +861,11 @@ export default {
                 const caret = plainTextValue.value.length;
                 processMentionState(plainTextValue.value, caret);
                 // Check format state after selection update (with small delay to let mentions process first)
-                nextTick(() => {
-                    if (!showMentionsDropdown.value) {
+                setTimeout(() => {
+                    if (!showMentionsDropdown.value && richInputRef.value) {
                         checkFormatState();
                     }
-                });
+                }, 50);
             }
         };
 
@@ -1134,17 +1134,23 @@ export default {
             if (props.allowRichText && typeof document !== 'undefined') {
                 const frontDoc = getFrontDocument();
                 debouncedCheckFormatState = () => {
+                    // Only check if rich input is focused and mentions dropdown is not open
+                    if (showMentionsDropdown.value || !richInputRef.value) return;
+                    
+                    const activeElement = frontDoc.activeElement;
+                    if (activeElement !== richInputRef.value) return;
+                    
                     // Clear any pending check
                     if (formatCheckTimeout) {
                         clearTimeout(formatCheckTimeout);
                     }
-                    // Debounce the check and only run if mentions dropdown is not open
+                    // Debounce the check
                     formatCheckTimeout = setTimeout(() => {
-                        if (!showMentionsDropdown.value && richInputRef.value) {
+                        if (!showMentionsDropdown.value && richInputRef.value && frontDoc.activeElement === richInputRef.value) {
                             checkFormatState();
                         }
                         formatCheckTimeout = null;
-                    }, 150);
+                    }, 200);
                 };
                 frontDoc.addEventListener('selectionchange', debouncedCheckFormatState);
             }
@@ -1358,20 +1364,23 @@ export default {
                 cleanupMentionSpans();
             }
             
+            // Get caret position BEFORE converting HTML (more accurate)
             const caret = getCaretOffsetFromRich();
             const html = richInputRef.value.innerHTML;
             const { markdown, plainText } = convertHtmlToMarkdown(html);
             inputValue.value = markdown;
             plainTextValue.value = plainText;
+            
+            // Process mentions immediately
             processMentionState(plainText, caret);
             captureCurrentRichRange();
             
-            // Check format state after processing input (with delay to let mentions process first)
-            nextTick(() => {
-                if (!showMentionsDropdown.value) {
+            // Check format state after a short delay (let mentions process first)
+            setTimeout(() => {
+                if (!showMentionsDropdown.value && richInputRef.value) {
                     checkFormatState();
                 }
-            });
+            }, 50);
         };
 
         const handleRichKeyDown = (event) => {
@@ -1450,13 +1459,19 @@ export default {
 
         const processMentionState = (text, cursorPos) => {
             const safeText = text ?? '';
-            plainTextValue.value = safeText;
-            const textBeforeCursor = safeText.substring(0, cursorPos);
+            // Ensure plainTextValue is updated
+            if (plainTextValue.value !== safeText) {
+                plainTextValue.value = safeText;
+            }
+            
+            const textBeforeCursor = safeText.substring(0, Math.min(cursorPos, safeText.length));
             const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
             if (lastAtIndex !== -1) {
                 const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-                if (!/\s/.test(textAfterAt)) {
+                // Check if there's no space after @ (meaning we're still typing the mention)
+                // Also allow empty string right after @
+                if (textAfterAt === '' || !/\s/.test(textAfterAt)) {
                     mentionStartPos.value = lastAtIndex;
                     mentionSearchText.value = textAfterAt;
                     showMentionsDropdown.value = true;
@@ -1466,7 +1481,10 @@ export default {
                 }
             }
 
-            showMentionsDropdown.value = false;
+            // No @ found or space after @, hide dropdown
+            if (showMentionsDropdown.value) {
+                showMentionsDropdown.value = false;
+            }
             mentionSearchText.value = '';
             mentionStartPos.value = -1;
             checkRemovedMentions();
@@ -1588,10 +1606,10 @@ export default {
                 
                 // Update format state after applying format (with delay to let input process)
                 setTimeout(() => {
-                    if (!showMentionsDropdown.value) {
+                    if (!showMentionsDropdown.value && richInputRef.value) {
                         checkFormatState();
                     }
-                }, 50);
+                }, 100);
             };
             
             if (isMobile) {
