@@ -1364,15 +1364,24 @@ export default {
                 cleanupMentionSpans();
             }
             
-            // Get caret position BEFORE converting HTML (more accurate)
-            const caret = getCaretOffsetFromRich();
-            const html = richInputRef.value.innerHTML;
-            const { markdown, plainText } = convertHtmlToMarkdown(html);
-            inputValue.value = markdown;
-            plainTextValue.value = plainText;
+            // Get plain text directly from textContent (more reliable for mentions)
+            // This ensures @ symbols are preserved and positions match
+            const plainTextFromContent = richInputRef.value.textContent || '';
             
-            // Process mentions immediately
-            processMentionState(plainText, caret);
+            // Get caret position based on textContent (matches plaintext)
+            const caret = getCaretOffsetFromRich();
+            
+            // Also convert to markdown for storage
+            const html = richInputRef.value.innerHTML;
+            const { markdown, plainText: plainTextFromMarkdown } = convertHtmlToMarkdown(html);
+            inputValue.value = markdown;
+            
+            // Use textContent for mention detection (more accurate)
+            // But store the markdown-converted version for consistency
+            plainTextValue.value = plainTextFromMarkdown;
+            
+            // Process mentions using textContent (preserves @ symbols accurately)
+            processMentionState(plainTextFromContent, caret);
             captureCurrentRichRange();
             
             // Check format state after a short delay (let mentions process first)
@@ -1395,24 +1404,29 @@ export default {
 
         const getCaretOffsetFromRich = () => {
             if (!richInputRef.value) {
-                return plainTextValue.value.length;
+                return 0;
             }
             const win = getFrontWindow();
             const selection = win.getSelection();
             if (!selection || selection.rangeCount === 0) {
-                return plainTextValue.value.length;
+                // No selection, return end of textContent
+                return (richInputRef.value.textContent || '').length;
             }
             const range = selection.getRangeAt(0);
             
             // Check if selection is within our rich input
             if (!richInputRef.value.contains(range.commonAncestorContainer)) {
-                return plainTextValue.value.length;
+                return (richInputRef.value.textContent || '').length;
             }
             
+            // Calculate caret position based on textContent (matches plaintext)
             const preRange = range.cloneRange();
             preRange.selectNodeContents(richInputRef.value);
             preRange.setEnd(range.endContainer, range.endOffset);
-            return preRange.toString().length;
+            
+            // Get the text up to the caret position (this matches textContent)
+            const textUpToCaret = preRange.toString();
+            return textUpToCaret.length;
         };
 
         const setCaretOffsetInRich = (offset) => {
