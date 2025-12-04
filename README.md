@@ -27,8 +27,7 @@ editor, open developer popup and add `localhost:[PORT]` as custom element.
 
 ## Build
 
-Before release, you can check build errors by running
-`npm run build --name="ww-chat" --type="element"`
+Before release, you can check build errors by running `npm run build`
 
 ---
 
