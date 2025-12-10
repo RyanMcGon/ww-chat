@@ -72,7 +72,7 @@
             </label>
 
             <!-- Input field -->
-            <div class="ww-chat-input-area__input-container" :style="richSizingStyle">
+            <div ref="inputContainerRef" class="ww-chat-input-area__input-container" :style="richSizingStyle">
                 <div v-if="allowRichText" class="ww-chat-input-area__toolbar">
                     <button
                         type="button"
@@ -225,7 +225,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, inject, watchEffect, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, inject, watchEffect, onMounted, onUnmounted } from 'vue';
 import { formatRichText } from '../utils/richTextFormatter';
 
 const getFrontWindow = () => {
@@ -527,6 +527,7 @@ export default {
         );
         const textareaRef = ref(null);
         const richInputRef = ref(null);
+        const inputContainerRef = ref(null);
         const inputValue = ref(props.modelValue);
         const plainTextValue = ref(props.modelValue || '');
         const sendIconText = ref(null);
@@ -993,6 +994,22 @@ export default {
                     adjustTextareaHeight();
                 }
             });
+
+            // Set up resize and scroll listeners for dropdown positioning
+            const frontWindow = getFrontWindow();
+            if (frontWindow) {
+                frontWindow.addEventListener('resize', handleResize);
+                frontWindow.addEventListener('scroll', handleResize, true);
+            }
+        });
+
+        // Clean up event listeners when component unmounts
+        onUnmounted(() => {
+            const frontWindow = getFrontWindow();
+            if (frontWindow) {
+                frontWindow.removeEventListener('resize', handleResize);
+                frontWindow.removeEventListener('scroll', handleResize, true);
+            }
         });
 
         const onEnterKey = event => {
@@ -1138,10 +1155,51 @@ export default {
             );
         });
 
-        const mentionsDropdownStyle = computed(() => ({
-            bottom: '100%',
-            marginBottom: '8px',
-        }));
+        const dropdownPosition = ref({ top: 0, left: 0, width: 0 });
+
+        const calculateDropdownPosition = () => {
+            if (!inputContainerRef.value) {
+                // If element doesn't exist yet, try again in next tick
+                nextTick(() => {
+                    if (inputContainerRef.value) {
+                        calculateDropdownPosition();
+                    }
+                });
+                return;
+            }
+
+            // Calculate position synchronously to avoid visual glitch
+            const containerRect = inputContainerRef.value.getBoundingClientRect();
+            const dropdownMaxHeight = 240; // max-height from CSS
+            const marginBottom = 8;
+            const viewportTop = 0;
+            const minMarginFromTop = 8; // Small margin from top of viewport
+            
+            // Calculate top position: above the input container
+            const preferredTop = containerRect.top - dropdownMaxHeight - marginBottom;
+            
+            // Ensure dropdown doesn't go above viewport - if it would, position it at the top with margin
+            const finalTop = Math.max(viewportTop + minMarginFromTop, preferredTop);
+            
+            dropdownPosition.value = {
+                top: finalTop,
+                left: containerRect.left,
+                width: containerRect.width,
+            };
+        };
+
+        const mentionsDropdownStyle = computed(() => {
+            if (!showMentionsDropdown.value) {
+                return {};
+            }
+            
+            return {
+                position: 'fixed',
+                top: `${dropdownPosition.value.top}px`,
+                left: `${dropdownPosition.value.left}px`,
+                width: `${dropdownPosition.value.width}px`,
+            };
+        });
 
         const getInitials = (name) => {
             if (!name) return '?';
@@ -1449,6 +1507,8 @@ export default {
                 if (!/\s/.test(textAfterAt)) {
                     mentionStartPos.value = lastAtIndex;
                     mentionSearchText.value = textAfterAt;
+                    // Calculate position BEFORE showing dropdown to avoid visual glitch
+                    calculateDropdownPosition();
                     showMentionsDropdown.value = true;
                     selectedMentionIndex.value = 0;
                     checkRemovedMentions();
@@ -1461,6 +1521,25 @@ export default {
             mentionStartPos.value = -1;
             checkRemovedMentions();
         };
+
+        // Watch for window resize to recalculate position
+        const handleResize = () => {
+            if (showMentionsDropdown.value) {
+                calculateDropdownPosition();
+            }
+        };
+
+        // Watch for dropdown visibility changes to recalculate position (for cases where dropdown is shown from other places)
+        watch(showMentionsDropdown, (isVisible) => {
+            if (isVisible) {
+                // Position is already calculated in processMentionState, but recalculate if needed
+                nextTick(() => {
+                    if (showMentionsDropdown.value && inputContainerRef.value) {
+                        calculateDropdownPosition();
+                    }
+                });
+            }
+        });
 
         const checkRemovedMentions = () => {
             const text = plainTextValue.value || '';
@@ -2412,9 +2491,7 @@ export default {
     }
 
     &__mentions-dropdown {
-        position: absolute;
-        left: 0;
-        right: 0;
+        position: fixed;
         background: white;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
