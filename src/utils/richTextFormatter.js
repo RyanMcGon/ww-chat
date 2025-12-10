@@ -122,9 +122,13 @@ const processRichText = (text, allowRichText = true) => {
 
     flushList();
 
-    result = segments.join('\n');
+    // Join segments without newlines to ensure <br /> tags render correctly
+    // HTML will collapse whitespace anyway, so we want <br /> tags directly adjacent to content
+    result = segments.join('');
+    
+    // Add proper spacing after lists
     result = result.replace(
-        /<\/ul>(?:\s*\n\s*){2,}/g,
+        /<\/ul>(?:\s*){2,}/g,
         '</ul><div class="ww-rt-break"><br /></div>'
     );
 
