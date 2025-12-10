@@ -76,9 +76,11 @@ const processRichText = (text, allowRichText = true) => {
     });
 
     // Convert simple markdown bullet lists (- item) into HTML lists
+    // But preserve all spacing, especially around formatted text and between paragraphs
     const lines = result.split('\n');
     const segments = [];
     let listBuffer = [];
+    let previousWasEmpty = false;
 
     const flushList = () => {
         if (listBuffer.length === 0) return;
@@ -86,22 +88,41 @@ const processRichText = (text, allowRichText = true) => {
         listBuffer = [];
     };
 
-    lines.forEach(line => {
+    lines.forEach((line, index) => {
         const match = line.match(/^\s*-\s+(.*)/);
         if (match) {
             listBuffer.push(`<li>${match[1]}</li>`);
+            previousWasEmpty = false;
         } else {
             flushList();
-            const trimmed = line.trim();
-            if (!trimmed) {
-                segments.push('');
-                return;
-            }
-
-            if (/^<\s*(ul|ol|li|div|p|table|blockquote|pre)/i.test(trimmed)) {
-                segments.push(trimmed);
+            const isLineEmpty = !line || line.trim().length === 0;
+            
+            if (isLineEmpty) {
+                // Preserve empty lines for paragraph spacing
+                // Only add breaks if there's content before and after
+                if (previousWasEmpty) {
+                    // Multiple consecutive empty lines - skip to avoid too many breaks
+                    segments.push('');
+                } else if (index < lines.length - 1 && segments.length > 0) {
+                    // Single empty line between content - preserve as paragraph break
+                    segments.push('<br />');
+                } else {
+                    segments.push('');
+                }
+                previousWasEmpty = true;
             } else {
-                segments.push(trimmed);
+                // Don't trim lines - preserve all spacing, especially around formatted text
+                // This ensures spaces between **bold** and regular text are preserved
+                
+                // If line starts with an HTML tag, preserve it as-is (but don't trim)
+                if (/^<\s*(ul|ol|li|div|p|table|blockquote|pre)/i.test(line.trim())) {
+                    segments.push(line.trim());
+                } else {
+                    // Preserve the line as-is to maintain spacing around formatted text
+                    // This ensures spaces between **bold** and regular text are preserved
+                    segments.push(line);
+                }
+                previousWasEmpty = false;
             }
         }
     });

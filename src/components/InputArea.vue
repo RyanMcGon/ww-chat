@@ -314,30 +314,84 @@ const convertHtmlToMarkdown = (html) => {
         const nodeMarkers = getMarkersFromNode(node);
         const combinedMarkers = mergeMarkers(activeMarkers, nodeMarkers);
 
+        // Helper function to process child nodes while preserving spaces
+        const processChildren = (parentNode, markers) => {
+            const children = Array.from(parentNode.childNodes);
+            const parts = [];
+            
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                const result = walkNodes(child, markers);
+                parts.push(result);
+                
+                // If current child is an element and next sibling is also an element (not a text node),
+                // check if there's a space between them by examining the parent's textContent
+                if (child.nodeType === Node.ELEMENT_NODE && i < children.length - 1) {
+                    const nextChild = children[i + 1];
+                    if (nextChild.nodeType === Node.ELEMENT_NODE) {
+                        // Use a more reliable method: create a range to check what's between the elements
+                        const frontDoc = getFrontDocument();
+                        const range = frontDoc.createRange();
+                        try {
+                            range.setStartAfter(child);
+                            range.setEndBefore(nextChild);
+                            const betweenText = range.toString();
+                            
+                            // If there's text (including spaces) between the elements, preserve it
+                            if (betweenText.length > 0) {
+                                // Preserve spaces and other whitespace (but normalize multiple spaces to one)
+                                if (betweenText.trim().length === 0) {
+                                    // It's just whitespace - preserve at least one space
+                                    parts.push(betweenText.includes('\n') ? betweenText : ' ');
+                                } else {
+                                    // It has non-whitespace content - preserve it as-is
+                                    parts.push(betweenText);
+                                }
+                            }
+                        } catch (e) {
+                            // Fallback: use textContent comparison if range method fails
+                            const parentText = parentNode.textContent || '';
+                            const childText = child.textContent || '';
+                            const nextChildText = nextChild.textContent || '';
+                            
+                            const childIndex = parentText.indexOf(childText);
+                            if (childIndex !== -1) {
+                                const childEnd = childIndex + childText.length;
+                                const nextIndex = parentText.indexOf(nextChildText, childEnd);
+                                if (nextIndex > childEnd) {
+                                    const gap = parentText.substring(childEnd, nextIndex);
+                                    if (gap.trim().length === 0 && gap.length > 0) {
+                                        parts.push(gap.includes('\n') ? gap : ' ');
+                                    } else if (gap.length > 0) {
+                                        parts.push(gap);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return parts.join('');
+        };
+
         switch (tag) {
             case 'br':
                 return '\n';
             case 'a': {
                 const href = node.getAttribute('href') || '';
-                const label = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, combinedMarkers))
-                    .join('') || href;
+                const label = processChildren(node, combinedMarkers) || href;
                 return href ? `[${label}](${href})` : label;
             }
             case 'li': {
-                const liContent = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, combinedMarkers))
-                    .join('')
-                    .trim();
+                const liContent = processChildren(node, combinedMarkers).trim();
                 return liContent ? `- ${liContent}\n` : '';
             }
             case 'ul':
             case 'ol':
             case 'div':
             case 'p': {
-                const block = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, combinedMarkers))
-                    .join('');
+                const block = processChildren(node, combinedMarkers);
                 if (!block) return '';
 
                 const newMarkers = nodeMarkers.filter(marker => !activeMarkers.includes(marker));
@@ -345,9 +399,7 @@ const convertHtmlToMarkdown = (html) => {
                 return `${wrapped}\n`;
             }
             default: {
-                const content = Array.from(node.childNodes)
-                    .map(child => walkNodes(child, combinedMarkers))
-                    .join('');
+                const content = processChildren(node, combinedMarkers);
 
                 if (!hasMeaningfulText(content)) {
                     return content;
