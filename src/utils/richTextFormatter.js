@@ -98,10 +98,10 @@ const processRichText = (text, allowRichText = true) => {
             const isLineEmpty = !line || line.trim().length === 0;
             
             if (isLineEmpty) {
-                // Convert every empty line to <br /> tag to preserve paragraph spacing
+                // Convert every empty line to <br /><br /> tags to preserve paragraph spacing
                 // This ensures that blank lines between paragraphs are visible in the rendered HTML
                 // Multiple consecutive empty lines will create multiple <br /> tags for extra spacing
-                segments.push('<br />');
+                segments.push('<br /><br />');
                 previousWasEmpty = true;
             } else {
                 // Don't trim lines - preserve all spacing, especially around formatted text
