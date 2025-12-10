@@ -225,7 +225,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, inject, watchEffect, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, nextTick, inject, watchEffect, onMounted } from 'vue';
 import { formatRichText } from '../utils/richTextFormatter';
 
 const getFrontWindow = () => {
@@ -994,22 +994,6 @@ export default {
                     adjustTextareaHeight();
                 }
             });
-
-            // Set up resize and scroll listeners for dropdown positioning
-            const frontWindow = getFrontWindow();
-            if (frontWindow) {
-                frontWindow.addEventListener('resize', handleResize);
-                frontWindow.addEventListener('scroll', handleResize, true);
-            }
-        });
-
-        // Clean up event listeners when component unmounts
-        onUnmounted(() => {
-            const frontWindow = getFrontWindow();
-            if (frontWindow) {
-                frontWindow.removeEventListener('resize', handleResize);
-                frontWindow.removeEventListener('scroll', handleResize, true);
-            }
         });
 
         const onEnterKey = event => {
@@ -1155,93 +1139,10 @@ export default {
             );
         });
 
-        const dropdownPosition = ref({ top: 0, left: 0, width: 0 });
-
-        const calculateDropdownPosition = () => {
-            if (!inputContainerRef.value) {
-                // If element doesn't exist yet, try again in next tick
-                nextTick(() => {
-                    if (inputContainerRef.value) {
-                        calculateDropdownPosition();
-                    }
-                });
-                return;
-            }
-
-            // Calculate position synchronously to avoid visual glitch
-            // Use getBoundingClientRect() which returns viewport coordinates for fixed positioning
-            const containerRect = inputContainerRef.value.getBoundingClientRect();
-            const frontWindow = getFrontWindow();
-            const frontDoc = getFrontDocument();
-            
-            // Get viewport dimensions
-            const viewportWidth = frontWindow.innerWidth || frontDoc.documentElement.clientWidth;
-            const viewportHeight = frontWindow.innerHeight || frontDoc.documentElement.clientHeight;
-            
-            const dropdownMaxHeight = 240; // max-height from CSS
-            const marginBottom = 8;
-            const minMarginFromTop = 8; // Small margin from top of viewport
-            
-            // Calculate top position: above the input container
-            const preferredTop = containerRect.top - dropdownMaxHeight - marginBottom;
-            
-            // Ensure dropdown doesn't go above viewport - if it would, position it at the top with margin
-            const finalTop = Math.max(minMarginFromTop, preferredTop);
-            
-            // Calculate left position and width
-            // getBoundingClientRect() returns viewport coordinates for fixed positioning
-            let finalLeft = containerRect.left;
-            let finalWidth = containerRect.width;
-            
-            // Validate the position - if it seems incorrect (negative or way off), use fallback
-            const inputArea = inputContainerRef.value.closest('.ww-chat-input-area');
-            if ((finalLeft < 0 || finalLeft > viewportWidth || finalWidth <= 0) && inputArea) {
-                // Fallback: calculate from input area, accounting for padding
-                const inputAreaRect = inputArea.getBoundingClientRect();
-                // Input area has padding: 16px 20px, input container starts 20px from left edge
-                finalLeft = inputAreaRect.left + 20;
-                finalWidth = inputAreaRect.width - 40; // Account for 20px padding on each side
-            }
-            
-            // Ensure values are reasonable
-            if (finalLeft < 0) {
-                finalLeft = 0;
-            }
-            
-            if (finalWidth <= 0) {
-                finalWidth = Math.max(200, containerRect.width || 300);
-            }
-            
-            if (finalWidth > viewportWidth) {
-                finalWidth = viewportWidth - 20; // Leave margin
-            }
-            
-            // Ensure dropdown fits within viewport
-            if (finalLeft + finalWidth > viewportWidth) {
-                finalWidth = Math.max(200, viewportWidth - finalLeft - 10); // Leave 10px margin
-            }
-            
-            // Use container's position and width to match original alignment
-            // Round values to avoid sub-pixel rendering issues
-            dropdownPosition.value = {
-                top: Math.round(finalTop),
-                left: Math.round(finalLeft),
-                width: Math.round(finalWidth),
-            };
-        };
-
-        const mentionsDropdownStyle = computed(() => {
-            if (!showMentionsDropdown.value) {
-                return {};
-            }
-            
-            return {
-                position: 'fixed',
-                top: `${dropdownPosition.value.top}px`,
-                left: `${dropdownPosition.value.left}px`,
-                width: `${dropdownPosition.value.width}px`,
-            };
-        });
+        const mentionsDropdownStyle = computed(() => ({
+            bottom: '100%',
+            marginBottom: '8px',
+        }));
 
         const getInitials = (name) => {
             if (!name) return '?';
@@ -1549,8 +1450,6 @@ export default {
                 if (!/\s/.test(textAfterAt)) {
                     mentionStartPos.value = lastAtIndex;
                     mentionSearchText.value = textAfterAt;
-                    // Calculate position BEFORE showing dropdown to avoid visual glitch
-                    calculateDropdownPosition();
                     showMentionsDropdown.value = true;
                     selectedMentionIndex.value = 0;
                     checkRemovedMentions();
@@ -1564,24 +1463,6 @@ export default {
             checkRemovedMentions();
         };
 
-        // Watch for window resize to recalculate position
-        const handleResize = () => {
-            if (showMentionsDropdown.value) {
-                calculateDropdownPosition();
-            }
-        };
-
-        // Watch for dropdown visibility changes to recalculate position (for cases where dropdown is shown from other places)
-        watch(showMentionsDropdown, (isVisible) => {
-            if (isVisible) {
-                // Position is already calculated in processMentionState, but recalculate if needed
-                nextTick(() => {
-                    if (showMentionsDropdown.value && inputContainerRef.value) {
-                        calculateDropdownPosition();
-                    }
-                });
-            }
-        });
 
         const checkRemovedMentions = () => {
             const text = plainTextValue.value || '';
@@ -2533,7 +2414,9 @@ export default {
     }
 
     &__mentions-dropdown {
-        position: fixed;
+        position: absolute;
+        left: 0;
+        right: 0;
         background: white;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
