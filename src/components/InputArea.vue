@@ -1169,25 +1169,68 @@ export default {
             }
 
             // Calculate position synchronously to avoid visual glitch
-            // Use container's position to match original absolute positioning behavior (left: 0, right: 0)
+            // Use getBoundingClientRect() which returns viewport coordinates for fixed positioning
             const containerRect = inputContainerRef.value.getBoundingClientRect();
+            const frontWindow = getFrontWindow();
+            const frontDoc = getFrontDocument();
+            
+            // Get viewport dimensions
+            const viewportWidth = frontWindow.innerWidth || frontDoc.documentElement.clientWidth;
+            const viewportHeight = frontWindow.innerHeight || frontDoc.documentElement.clientHeight;
+            
             const dropdownMaxHeight = 240; // max-height from CSS
             const marginBottom = 8;
-            const viewportTop = 0;
             const minMarginFromTop = 8; // Small margin from top of viewport
             
             // Calculate top position: above the input container
             const preferredTop = containerRect.top - dropdownMaxHeight - marginBottom;
             
             // Ensure dropdown doesn't go above viewport - if it would, position it at the top with margin
-            const finalTop = Math.max(viewportTop + minMarginFromTop, preferredTop);
+            const finalTop = Math.max(minMarginFromTop, preferredTop);
+            
+            // Calculate left position and width
+            // getBoundingClientRect() gives viewport coordinates, which is correct for fixed positioning
+            let finalLeft = containerRect.left;
+            let finalWidth = containerRect.width;
+            
+            // Validate the bounding rect values - if they seem incorrect, use fallback
+            // Check if left is unreasonably small (likely indicates a calculation issue)
+            if (finalLeft < -1000 || finalLeft > viewportWidth + 1000) {
+                // Fallback: try to find the input area parent and calculate from there
+                const inputArea = inputContainerRef.value.closest('.ww-chat-input-area');
+                if (inputArea) {
+                    const inputAreaRect = inputArea.getBoundingClientRect();
+                    // Input area has padding: 16px 20px, so container should be 20px from left edge
+                    finalLeft = inputAreaRect.left + 20;
+                    finalWidth = inputAreaRect.width - 40; // Account for 20px padding on each side
+                } else {
+                    // Last resort: use viewport center
+                    finalLeft = Math.max(0, (viewportWidth - 300) / 2);
+                    finalWidth = 300;
+                }
+            }
+            
+            // Ensure width is reasonable (not zero or negative)
+            if (finalWidth <= 0 || finalWidth > viewportWidth) {
+                finalWidth = Math.min(viewportWidth - 20, Math.max(200, containerRect.width || 300));
+            }
+            
+            // Ensure left is not negative and dropdown fits in viewport
+            if (finalLeft < 0) {
+                finalLeft = 0;
+            }
+            
+            // If dropdown would go off the right edge, adjust width
+            if (finalLeft + finalWidth > viewportWidth) {
+                finalWidth = Math.max(200, viewportWidth - finalLeft - 10); // Leave 10px margin
+            }
             
             // Use container's position and width to match original alignment
             // Round values to avoid sub-pixel rendering issues
             dropdownPosition.value = {
                 top: Math.round(finalTop),
-                left: Math.round(containerRect.left),
-                width: Math.round(containerRect.width),
+                left: Math.round(finalLeft),
+                width: Math.round(finalWidth),
             };
         };
 
