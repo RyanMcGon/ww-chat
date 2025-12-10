@@ -1169,6 +1169,7 @@ export default {
             }
 
             // Calculate position synchronously to avoid visual glitch
+            // Use container's position to match original absolute positioning behavior (left: 0, right: 0)
             const containerRect = inputContainerRef.value.getBoundingClientRect();
             const dropdownMaxHeight = 240; // max-height from CSS
             const marginBottom = 8;
@@ -1181,10 +1182,12 @@ export default {
             // Ensure dropdown doesn't go above viewport - if it would, position it at the top with margin
             const finalTop = Math.max(viewportTop + minMarginFromTop, preferredTop);
             
+            // Use container's position and width to match original alignment
+            // Round values to avoid sub-pixel rendering issues
             dropdownPosition.value = {
-                top: finalTop,
-                left: containerRect.left,
-                width: containerRect.width,
+                top: Math.round(finalTop),
+                left: Math.round(containerRect.left),
+                width: Math.round(containerRect.width),
             };
         };
 
