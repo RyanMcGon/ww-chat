@@ -98,17 +98,10 @@ const processRichText = (text, allowRichText = true) => {
             const isLineEmpty = !line || line.trim().length === 0;
             
             if (isLineEmpty) {
-                // Preserve empty lines for paragraph spacing
-                // Only add breaks if there's content before and after
-                if (previousWasEmpty) {
-                    // Multiple consecutive empty lines - skip to avoid too many breaks
-                    segments.push('');
-                } else if (index < lines.length - 1 && segments.length > 0) {
-                    // Single empty line between content - preserve as paragraph break
-                    segments.push('<br />');
-                } else {
-                    segments.push('');
-                }
+                // Convert every empty line to <br /> tag to preserve paragraph spacing
+                // This ensures that blank lines between paragraphs are visible in the rendered HTML
+                // Multiple consecutive empty lines will create multiple <br /> tags for extra spacing
+                segments.push('<br />');
                 previousWasEmpty = true;
             } else {
                 // Don't trim lines - preserve all spacing, especially around formatted text
