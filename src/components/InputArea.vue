@@ -1189,38 +1189,34 @@ export default {
             const finalTop = Math.max(minMarginFromTop, preferredTop);
             
             // Calculate left position and width
-            // getBoundingClientRect() gives viewport coordinates, which is correct for fixed positioning
+            // getBoundingClientRect() returns viewport coordinates for fixed positioning
             let finalLeft = containerRect.left;
             let finalWidth = containerRect.width;
             
-            // Validate the bounding rect values - if they seem incorrect, use fallback
-            // Check if left is unreasonably small (likely indicates a calculation issue)
-            if (finalLeft < -1000 || finalLeft > viewportWidth + 1000) {
-                // Fallback: try to find the input area parent and calculate from there
-                const inputArea = inputContainerRef.value.closest('.ww-chat-input-area');
-                if (inputArea) {
-                    const inputAreaRect = inputArea.getBoundingClientRect();
-                    // Input area has padding: 16px 20px, so container should be 20px from left edge
-                    finalLeft = inputAreaRect.left + 20;
-                    finalWidth = inputAreaRect.width - 40; // Account for 20px padding on each side
-                } else {
-                    // Last resort: use viewport center
-                    finalLeft = Math.max(0, (viewportWidth - 300) / 2);
-                    finalWidth = 300;
-                }
+            // Validate the position - if it seems incorrect (negative or way off), use fallback
+            const inputArea = inputContainerRef.value.closest('.ww-chat-input-area');
+            if ((finalLeft < 0 || finalLeft > viewportWidth || finalWidth <= 0) && inputArea) {
+                // Fallback: calculate from input area, accounting for padding
+                const inputAreaRect = inputArea.getBoundingClientRect();
+                // Input area has padding: 16px 20px, input container starts 20px from left edge
+                finalLeft = inputAreaRect.left + 20;
+                finalWidth = inputAreaRect.width - 40; // Account for 20px padding on each side
             }
             
-            // Ensure width is reasonable (not zero or negative)
-            if (finalWidth <= 0 || finalWidth > viewportWidth) {
-                finalWidth = Math.min(viewportWidth - 20, Math.max(200, containerRect.width || 300));
-            }
-            
-            // Ensure left is not negative and dropdown fits in viewport
+            // Ensure values are reasonable
             if (finalLeft < 0) {
                 finalLeft = 0;
             }
             
-            // If dropdown would go off the right edge, adjust width
+            if (finalWidth <= 0) {
+                finalWidth = Math.max(200, containerRect.width || 300);
+            }
+            
+            if (finalWidth > viewportWidth) {
+                finalWidth = viewportWidth - 20; // Leave margin
+            }
+            
+            // Ensure dropdown fits within viewport
             if (finalLeft + finalWidth > viewportWidth) {
                 finalWidth = Math.max(200, viewportWidth - finalLeft - 10); // Leave 10px margin
             }
