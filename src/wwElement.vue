@@ -192,6 +192,10 @@ export default {
         InputArea,
     },
     props: {
+        uid: {
+            type: String,
+            required: true,
+        },
         content: {
             type: Object,
             required: true,
@@ -202,10 +206,6 @@ export default {
             required: true,
         },
         /* wwEditor:end */
-        uid: {
-            type: String,
-            required: true,
-        },
         wwElementState: {
             type: Object,
             required: true,
