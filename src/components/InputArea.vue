@@ -415,13 +415,16 @@ const convertHtmlToMarkdown = (html) => {
         .map(child => walkNodes(child, []))
         .join('');
     
-    // Derive plainText from markdown to preserve newlines that walkNodes correctly captured
+    // Normalize markdown first (replace non-breaking spaces and collapse excessive newlines)
+    const normalizedMarkdown = markdown.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trimEnd();
+    
+    // Derive plainText from normalized markdown to preserve newlines that walkNodes correctly captured
     // Strip markdown syntax characters while preserving the newline structure
-    const plainText = markdown.replace(/[*_~`\[\]()]/g, '');
+    const plainText = normalizedMarkdown.replace(/[*_~`\[\]()]/g, '');
 
     return {
-        markdown: markdown.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trimEnd(),
-        plainText: plainText.replace(/\u00a0/g, ' '),
+        markdown: normalizedMarkdown,
+        plainText: plainText,
     };
 };
 
