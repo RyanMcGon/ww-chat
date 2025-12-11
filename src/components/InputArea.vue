@@ -1061,16 +1061,12 @@ export default {
 
         // Click-outside handler for mentions dropdown
         const handleClickOutside = (event) => {
-            if (!showMentionsDropdown.value) return;
+            const frontDoc = getFrontDocument();
+            const inputArea = richInputRef.value || textareaRef.value;
+            const dropdown = frontDoc.querySelector('.ww-chat-input-area__mentions-dropdown');
 
-            const target = event.target;
-            
-            // Check if click is outside the input container (which contains both input and dropdown)
-            const isOutsideInputContainer = inputContainerRef.value && 
-                !inputContainerRef.value.contains(target);
-            
-            // Close dropdown if click is outside the input container
-            if (isOutsideInputContainer) {
+            if (inputArea && !inputArea.contains(event.target) && 
+                (!dropdown || !dropdown.contains(event.target))) {
                 showMentionsDropdown.value = false;
                 mentionSearchText.value = '';
                 mentionStartPos.value = -1;
@@ -1078,22 +1074,19 @@ export default {
         };
 
         // Watch showMentionsDropdown to add/remove click-outside listener
-        watch(showMentionsDropdown, (isOpen) => {
+        watch(showMentionsDropdown, (isVisible) => {
             const frontDoc = getFrontDocument();
-            if (isOpen) {
-                // Use nextTick to ensure the dropdown element is in the DOM
-                nextTick(() => {
-                    frontDoc.addEventListener('click', handleClickOutside, true);
-                });
+            if (isVisible) {
+                frontDoc.addEventListener('click', handleClickOutside);
             } else {
-                frontDoc.removeEventListener('click', handleClickOutside, true);
+                frontDoc.removeEventListener('click', handleClickOutside);
             }
         });
 
         // Clean up listener on unmount
         onUnmounted(() => {
             const frontDoc = getFrontDocument();
-            frontDoc.removeEventListener('click', handleClickOutside, true);
+            frontDoc.removeEventListener('click', handleClickOutside);
         });
 
         const onEnterKey = event => {
