@@ -935,7 +935,10 @@ export default {
                 props.mentionsBgColor
             );
             richInputRef.value.innerHTML = html || '';
-            plainTextValue.value = richInputRef.value.textContent?.replace(/\u00a0/g, ' ') || '';
+            // Derive plainText from markdown (inputValue) to preserve newlines
+            // Strip markdown syntax characters while preserving the newline structure
+            const markdown = inputValue.value || '';
+            plainTextValue.value = markdown.replace(/[*_~`\[\]()]/g, '').replace(/\u00a0/g, ' ');
             
             // Don't clean up mention spans here - let handleRichInput handle it
             // This prevents interference with normal typing
