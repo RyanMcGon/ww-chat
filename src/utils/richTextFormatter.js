@@ -104,6 +104,16 @@ const processRichText = (text, allowRichText = true) => {
                 segments.push('<br /><br />');
                 previousWasEmpty = true;
             } else {
+                // Add <br /> before this line if previous line was not empty (to preserve newlines between content lines)
+                if (!previousWasEmpty && segments.length > 0) {
+                    // Check if last segment doesn't already end with a break or is a block element
+                    const lastSegment = segments[segments.length - 1];
+                    if (!lastSegment.endsWith('<br />') && !lastSegment.endsWith('<br>') && 
+                        !/^<\s*(ul|ol|li|div|p|table|blockquote|pre)/i.test(lastSegment.trim())) {
+                        segments.push('<br />');
+                    }
+                }
+                
                 // Don't trim lines - preserve all spacing, especially around formatted text
                 // This ensures spaces between **bold** and regular text are preserved
                 
