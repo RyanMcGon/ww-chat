@@ -414,7 +414,10 @@ const convertHtmlToMarkdown = (html) => {
     const markdown = Array.from(doc.childNodes)
         .map(child => walkNodes(child, []))
         .join('');
-    const plainText = doc.textContent || '';
+    
+    // Derive plainText from markdown to preserve newlines that walkNodes correctly captured
+    // Strip markdown syntax characters while preserving the newline structure
+    const plainText = markdown.replace(/[*_~`\[\]()]/g, '');
 
     return {
         markdown: markdown.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trimEnd(),
