@@ -164,6 +164,7 @@
                 <!-- Mentions dropdown -->
                 <div
                     v-if="showMentionsDropdown"
+                    ref="mentionsDropdownRef"
                     class="ww-chat-input-area__mentions-dropdown"
                     :style="mentionsDropdownStyle"
                 >
@@ -225,7 +226,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, nextTick, inject, watchEffect, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, inject, watchEffect, onMounted, onUnmounted } from 'vue';
 import { formatRichText } from '../utils/richTextFormatter';
 
 const getFrontWindow = () => {
@@ -586,6 +587,7 @@ export default {
         const textareaRef = ref(null);
         const richInputRef = ref(null);
         const inputContainerRef = ref(null);
+        const mentionsDropdownRef = ref(null);
         const inputValue = ref(props.modelValue);
         const plainTextValue = ref(props.modelValue || '');
         const sendIconText = ref(null);
@@ -1055,6 +1057,43 @@ export default {
                     adjustTextareaHeight();
                 }
             });
+        });
+
+        // Click-outside handler for mentions dropdown
+        const handleClickOutside = (event) => {
+            if (!showMentionsDropdown.value) return;
+
+            const target = event.target;
+            
+            // Check if click is outside the input container (which contains both input and dropdown)
+            const isOutsideInputContainer = inputContainerRef.value && 
+                !inputContainerRef.value.contains(target);
+            
+            // Close dropdown if click is outside the input container
+            if (isOutsideInputContainer) {
+                showMentionsDropdown.value = false;
+                mentionSearchText.value = '';
+                mentionStartPos.value = -1;
+            }
+        };
+
+        // Watch showMentionsDropdown to add/remove click-outside listener
+        watch(showMentionsDropdown, (isOpen) => {
+            const frontDoc = getFrontDocument();
+            if (isOpen) {
+                // Use nextTick to ensure the dropdown element is in the DOM
+                nextTick(() => {
+                    frontDoc.addEventListener('click', handleClickOutside, true);
+                });
+            } else {
+                frontDoc.removeEventListener('click', handleClickOutside, true);
+            }
+        });
+
+        // Clean up listener on unmount
+        onUnmounted(() => {
+            const frontDoc = getFrontDocument();
+            frontDoc.removeEventListener('click', handleClickOutside, true);
         });
 
         const onEnterKey = event => {
