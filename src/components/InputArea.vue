@@ -1232,10 +1232,29 @@ export default {
             );
         });
 
-        const mentionsDropdownStyle = computed(() => ({
-            bottom: '100%',
-            marginBottom: '8px',
-        }));
+        const mentionsDropdownStyle = computed(() => {
+            if (!showMentionsDropdown.value) return {};
+            
+            const inputEl = richInputRef.value || textareaRef.value;
+            if (!inputEl) return { bottom: '100%', marginBottom: '8px' };
+            
+            const rect = inputEl.getBoundingClientRect();
+            const spaceAbove = rect.top;
+            const dropdownHeight = 240; // max-height from CSS
+            
+            // If not enough space above, show below
+            if (spaceAbove < dropdownHeight) {
+                return {
+                    top: '100%',
+                    marginTop: '8px',
+                };
+            }
+            
+            return {
+                bottom: '100%',
+                marginBottom: '8px',
+            };
+        });
 
         const getInitials = (name) => {
             if (!name) return '?';
