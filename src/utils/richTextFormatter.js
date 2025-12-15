@@ -233,7 +233,9 @@ export const formatRichText = (text, mentions = [], allowRichText = true, mentio
 
         // Add the highlighted mention (don't process rich text in mentions)
         const escapedMention = escapeHtml(occurrence.text);
-        parts.push(`<span class="ww-message-item__mention" style="background-color: ${mentionsBgColor}; color: ${mentionsColor};">${escapedMention}</span>`);
+        const mentionId = occurrence.mention?.id || '';
+        const dataAttr = mentionId ? ` data-mention-id="${escapeHtml(mentionId)}"` : '';
+        parts.push(`<span class="ww-message-item__mention" style="background-color: ${mentionsBgColor}; color: ${mentionsColor};" contenteditable="false"${dataAttr}>${escapedMention}</span>`);
 
         // Check if there's a space immediately after the mention and preserve it
         const charAfterMention = text.charAt(occurrence.end);
