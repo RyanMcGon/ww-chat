@@ -609,6 +609,9 @@ export default {
                     editingMessage.value = null;
                     setEditingMessageState(null);
                 } else {
+                    // Ensure mentions is always an array (from InputArea parameter)
+                    const updatedMentions = Array.isArray(mentions) ? mentions : [];
+
                     const updatedOriginalData = {
                         ...(messageToEdit._originalData || {}),
                         id: messageToEdit.id,
@@ -617,7 +620,7 @@ export default {
                         userName: messageToEdit.userName,
                         timestamp: messageToEdit.timestamp,
                         attachments: messageToEdit.attachments,
-                        mentions: mentions,
+                        mentions: updatedMentions,
                         userSettings: messageToEdit.userSettings,
                     };
 
@@ -628,7 +631,7 @@ export default {
                         userName: messageToEdit.userName,
                         timestamp: new Date().toISOString(),
                         attachments: messageToEdit.attachments,
-                        mentions: mentions,
+                        mentions: updatedMentions,
                         userSettings: messageToEdit.userSettings,
                         _originalData: {
                             ...updatedOriginalData,
