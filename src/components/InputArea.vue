@@ -929,14 +929,63 @@ export default {
             if (!props.allowRichText || !richInputRef.value) return;
             const caret = preserveCaret ? getCaretOffsetFromRich() : plainTextValue.value.length;
             isSyncingRich.value = true;
+            
+            // Ensure all mentions have IDs before passing to formatRichText
+            // This ensures data-mention-id attributes are created in the HTML
+            const mentionsWithIds = mentions.value.map(mention => {
+                if (!mention.id && mention.name) {
+                    // Try to find participant by name to get ID
+                    const participant = props.participants?.find(p => p.name === mention.name);
+                    if (participant && participant.id) {
+                        return { ...mention, id: participant.id };
+                    }
+                }
+                return mention;
+            });
+            
             const html = formatRichText(
                 inputValue.value || '',
-                mentions.value,
+                mentionsWithIds,
                 true,
                 props.mentionsColor,
                 props.mentionsBgColor
             );
             richInputRef.value.innerHTML = html || '';
+            
+            // After setting HTML, ensure all mention spans have data-mention-id attributes
+            // This fixes cases where formatRichText didn't create them
+            nextTick(() => {
+                if (richInputRef.value) {
+                    const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+                    mentionSpans.forEach(span => {
+                        if (!span.getAttribute('data-mention-id')) {
+                            const spanText = span.textContent || '';
+                            const nameMatch = spanText.match(/^@(.+)$/);
+                            if (nameMatch) {
+                                const name = nameMatch[1].trim();
+                                // Find mention by name to get ID
+                                const mention = mentions.value.find(m => m.name === name);
+                                if (mention && mention.id) {
+                                    span.setAttribute('data-mention-id', mention.id);
+                                } else {
+                                    // Try to find participant by name
+                                    const participant = props.participants?.find(p => p.name === name);
+                                    if (participant && participant.id) {
+                                        span.setAttribute('data-mention-id', participant.id);
+                                        // Also add to mentions array if not already there
+                                        if (!mentions.value.find(m => m.id === participant.id)) {
+                                            mentions.value.push({
+                                                id: participant.id,
+                                                name: participant.name,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
             // Derive plainText from markdown (inputValue) to preserve newlines
             // Strip markdown syntax characters while preserving the newline structure
             const markdown = inputValue.value || '';
@@ -1207,7 +1256,7 @@ export default {
                 console.log('ww-chat: Found', mentionSpans.length, 'mention spans in DOM');
                 
                 mentionSpans.forEach(span => {
-                    const mentionId = span.getAttribute('data-mention-id');
+                    let mentionId = span.getAttribute('data-mention-id');
                     const mentionText = span.textContent || '';
                     console.log('ww-chat: Processing mention span:', { mentionId, mentionText });
                     
@@ -1215,6 +1264,24 @@ export default {
                     let name = mentionText.trim();
                     if (name.startsWith('@')) {
                         name = name.substring(1).trim();
+                    }
+                    
+                    // If span doesn't have data-mention-id, try to find it from mentions array or participants
+                    if (!mentionId && name) {
+                        // First try to find in mentions.value array
+                        const mentionFromArray = mentions.value?.find(m => m.name === name);
+                        if (mentionFromArray && mentionFromArray.id) {
+                            mentionId = mentionFromArray.id;
+                            // Restore the attribute for future use
+                            span.setAttribute('data-mention-id', mentionId);
+                        } else {
+                            // Try to find in participants
+                            const participant = props.participants?.find(p => p.name === name);
+                            if (participant && participant.id) {
+                                mentionId = participant.id;
+                                span.setAttribute('data-mention-id', mentionId);
+                            }
+                        }
                     }
                     
                     if (name && mentionId && !seenIds.has(mentionId)) {
@@ -1235,6 +1302,17 @@ export default {
                             });
                             seenIds.add(mentionId);
                             console.log('ww-chat: Added mention from DOM (fallback):', name);
+                        }
+                    } else if (name && !mentionId) {
+                        // If we still don't have an ID, try to match by name from mentions array
+                        const mentionFromArray = mentions.value?.find(m => m.name === name);
+                        if (mentionFromArray && mentionFromArray.id && !seenIds.has(mentionFromArray.id)) {
+                            extractedMentions.push({
+                                id: mentionFromArray.id,
+                                name: mentionFromArray.name,
+                            });
+                            seenIds.add(mentionFromArray.id);
+                            console.log('ww-chat: Added mention from DOM (matched by name):', mentionFromArray.name);
                         }
                     }
                 });
@@ -1699,10 +1777,51 @@ export default {
 
         const checkRemovedMentions = () => {
             const text = plainTextValue.value || '';
-            mentions.value = mentions.value.filter(mention => {
-                const mentionText = `@${mention.name}`;
-                return text.includes(mentionText);
-            });
+            
+            // For rich text mode, also check DOM for mention spans
+            // This is more reliable than just checking text, as spans preserve mention data
+            if (props.allowRichText && richInputRef.value) {
+                const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+                const foundMentionIds = new Set();
+                
+                // Collect all mention IDs from DOM spans
+                mentionSpans.forEach(span => {
+                    const mentionId = span.getAttribute('data-mention-id');
+                    if (mentionId) {
+                        foundMentionIds.add(mentionId);
+                    } else {
+                        // If span doesn't have data-mention-id, try to match by text
+                        const spanText = span.textContent || '';
+                        const nameMatch = spanText.match(/^@(.+)$/);
+                        if (nameMatch) {
+                            const name = nameMatch[1].trim();
+                            const mention = mentions.value.find(m => m.name === name);
+                            if (mention && mention.id) {
+                                foundMentionIds.add(mention.id);
+                                // Restore the data-mention-id attribute
+                                span.setAttribute('data-mention-id', mention.id);
+                            }
+                        }
+                    }
+                });
+                
+                // Keep mentions that are found in DOM or in text
+                mentions.value = mentions.value.filter(mention => {
+                    if (!mention || !mention.id) {
+                        // If mention has no ID, check by text match
+                        const mentionText = `@${mention.name}`;
+                        return text.includes(mentionText);
+                    }
+                    // Check if mention is in DOM or text
+                    return foundMentionIds.has(mention.id) || text.includes(`@${mention.name}`);
+                });
+            } else {
+                // For plain text mode, just check text content
+                mentions.value = mentions.value.filter(mention => {
+                    const mentionText = `@${mention.name}`;
+                    return text.includes(mentionText);
+                });
+            }
         };
 
         const insertFormatting = (prefix, suffix, placeholder = '') => {
