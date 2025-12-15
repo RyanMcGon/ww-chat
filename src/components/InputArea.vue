@@ -1194,16 +1194,20 @@ export default {
 
         const extractMentionsFromContent = () => {
             const extractedMentions = [];
+            const seenIds = new Set();
             
+            // Get the current text content (plain text version)
+            const text = plainTextValue.value || inputValue.value || '';
+            
+            // First, extract mentions from DOM spans (for rich text mode)
             if (props.allowRichText && richInputRef.value) {
-                // Extract mentions from rich text HTML DOM
                 const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
                 mentionSpans.forEach(span => {
                     const mentionId = span.getAttribute('data-mention-id');
                     const mentionText = span.textContent || '';
                     // Extract name from @name format
                     const nameMatch = mentionText.match(/^@(.+)$/);
-                    if (nameMatch && mentionId) {
+                    if (nameMatch && mentionId && !seenIds.has(mentionId)) {
                         const name = nameMatch[1].trim();
                         // Find participant to get full data
                         const participant = props.participants?.find(p => p.id === mentionId);
@@ -1212,45 +1216,79 @@ export default {
                                 id: participant.id,
                                 name: participant.name || name,
                             });
+                            seenIds.add(participant.id);
                         } else {
                             // Fallback: use what we have
                             extractedMentions.push({
                                 id: mentionId,
                                 name: name,
                             });
+                            seenIds.add(mentionId);
                         }
-                    }
-                });
-            } else {
-                // For plain text mode, use mentions.value which should be in sync
-                // But also verify against the actual text content
-                const text = plainTextValue.value || inputValue.value || '';
-                mentions.value.forEach(mention => {
-                    const mentionText = `@${mention.name}`;
-                    if (text.includes(mentionText)) {
-                        extractedMentions.push(mention);
                     }
                 });
             }
             
-            // Remove duplicates based on ID
-            const uniqueMentions = [];
-            const seenIds = new Set();
-            extractedMentions.forEach(mention => {
-                if (mention.id && !seenIds.has(mention.id)) {
-                    seenIds.add(mention.id);
-                    uniqueMentions.push(mention);
-                }
-            });
+            // Also check mentions.value array and verify they exist in the text
+            // This ensures we catch mentions that might have been added but not yet in DOM
+            if (mentions.value && Array.isArray(mentions.value)) {
+                mentions.value.forEach(mention => {
+                    if (!mention || !mention.id) return;
+                    
+                    // Skip if we already have this mention from DOM extraction
+                    if (seenIds.has(mention.id)) return;
+                    
+                    // Verify the mention text exists in the content
+                    const mentionText = `@${mention.name}`;
+                    if (text.includes(mentionText)) {
+                        extractedMentions.push({
+                            id: mention.id,
+                            name: mention.name,
+                        });
+                        seenIds.add(mention.id);
+                    }
+                });
+            }
             
-            return uniqueMentions;
+            // Additionally, scan the text for any @mentions that match participants
+            // This catches cases where mentions were typed but not properly tracked
+            if (props.participants && Array.isArray(props.participants)) {
+                props.participants.forEach(participant => {
+                    if (!participant || !participant.id || !participant.name) return;
+                    if (seenIds.has(participant.id)) return;
+                    
+                    const mentionPattern = `@${participant.name}`;
+                    // Check if mention exists in text with proper word boundaries
+                    const regex = new RegExp(`(^|\\s)${mentionPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$|[,.!?:;])`, 'g');
+                    if (regex.test(text)) {
+                        extractedMentions.push({
+                            id: participant.id,
+                            name: participant.name,
+                        });
+                        seenIds.add(participant.id);
+                    }
+                });
+            }
+            
+            return extractedMentions;
         };
 
         const sendMessage = () => {
             if (isEditing.value || !canSend.value || props.isDisabled) return;
 
+            // For rich text mode, ensure we sync the latest content before extracting mentions
+            if (props.allowRichText && richInputRef.value) {
+                // Trigger a sync to ensure plainTextValue is up to date
+                handleRichInput();
+            }
+            
             // Extract mentions from current content state to ensure accuracy
             const currentMentions = extractMentionsFromContent();
+            
+            // Debug log to verify mentions are being extracted (can be removed in production)
+            if (currentMentions.length > 0) {
+                console.log('ww-chat: Extracted mentions for send:', currentMentions);
+            }
             
             emit('send', currentMentions);
             inputValue.value = '';
