@@ -1066,12 +1066,43 @@ export default {
             () => props.editingMessage,
             (newMessage) => {
                 if (newMessage) {
+                    console.log('ww-chat: Editing message started:', { 
+                        text: newMessage.text, 
+                        mentions: newMessage.mentions,
+                        mentionsCount: newMessage.mentions?.length || 0
+                    });
                     inputValue.value = newMessage.text || '';
                     mentions.value = newMessage.mentions ? [...newMessage.mentions] : [];
+                    console.log('ww-chat: Initialized mentions.value:', mentions.value);
+                    
+                    // Ensure all mentions have IDs before syncing
+                    mentions.value = mentions.value.map(mention => {
+                        if (!mention.id && mention.name) {
+                            const participant = props.participants?.find(p => p.name === mention.name);
+                            if (participant && participant.id) {
+                                console.log('ww-chat: Added ID to mention:', mention.name, '->', participant.id);
+                                return { ...mention, id: participant.id };
+                            }
+                        }
+                        return mention;
+                    });
+                    
                     if (props.allowRichText) {
                         syncRichEditor(false);
                         nextTick(() => {
                             if (richInputRef.value) {
+                                // Verify mention spans were created
+                                const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+                                console.log('ww-chat: After syncRichEditor, found', mentionSpans.length, 'mention spans');
+                                mentionSpans.forEach(span => {
+                                    const id = span.getAttribute('data-mention-id');
+                                    console.log('ww-chat: Mention span:', { 
+                                        text: span.textContent, 
+                                        hasId: !!id,
+                                        id: id
+                                    });
+                                });
+                                
                                 focusTextarea();
                                 setCaretOffsetInRich(plainTextValue.value.length);
                                 processMentionState(plainTextValue.value, plainTextValue.value.length);
@@ -1090,6 +1121,9 @@ export default {
                             processMentionState(plainTextValue.value, plainTextValue.value.length);
                         });
                     }
+                } else {
+                    // Editing cancelled or cleared
+                    console.log('ww-chat: Editing message cleared');
                 }
             },
             { immediate: true }
@@ -1777,50 +1811,103 @@ export default {
 
         const checkRemovedMentions = () => {
             const text = plainTextValue.value || '';
+            const beforeCount = mentions.value.length;
             
             // For rich text mode, also check DOM for mention spans
             // This is more reliable than just checking text, as spans preserve mention data
             if (props.allowRichText && richInputRef.value) {
                 const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
                 const foundMentionIds = new Set();
+                const foundMentionNames = new Set();
+                
+                console.log('ww-chat: checkRemovedMentions - checking', mentionSpans.length, 'spans,', mentions.value.length, 'mentions in array');
                 
                 // Collect all mention IDs from DOM spans
                 mentionSpans.forEach(span => {
                     const mentionId = span.getAttribute('data-mention-id');
+                    const spanText = span.textContent || '';
+                    const nameMatch = spanText.match(/^@(.+)$/);
+                    const name = nameMatch ? nameMatch[1].trim() : '';
+                    
                     if (mentionId) {
                         foundMentionIds.add(mentionId);
-                    } else {
+                        foundMentionNames.add(name);
+                        console.log('ww-chat: Found mention span with ID:', mentionId, name);
+                    } else if (name) {
                         // If span doesn't have data-mention-id, try to match by text
-                        const spanText = span.textContent || '';
-                        const nameMatch = spanText.match(/^@(.+)$/);
-                        if (nameMatch) {
-                            const name = nameMatch[1].trim();
-                            const mention = mentions.value.find(m => m.name === name);
-                            if (mention && mention.id) {
-                                foundMentionIds.add(mention.id);
-                                // Restore the data-mention-id attribute
-                                span.setAttribute('data-mention-id', mention.id);
+                        const mention = mentions.value.find(m => m.name === name);
+                        if (mention && mention.id) {
+                            foundMentionIds.add(mention.id);
+                            foundMentionNames.add(name);
+                            // Restore the data-mention-id attribute
+                            span.setAttribute('data-mention-id', mention.id);
+                            console.log('ww-chat: Restored data-mention-id for:', mention.id, name);
+                        } else {
+                            // Try to find participant
+                            const participant = props.participants?.find(p => p.name === name);
+                            if (participant && participant.id) {
+                                foundMentionIds.add(participant.id);
+                                foundMentionNames.add(name);
+                                span.setAttribute('data-mention-id', participant.id);
+                                // Add to mentions array if not there
+                                if (!mentions.value.find(m => m.id === participant.id)) {
+                                    mentions.value.push({ id: participant.id, name: participant.name });
+                                    console.log('ww-chat: Added missing mention to array:', participant.name);
+                                }
                             }
                         }
                     }
                 });
                 
                 // Keep mentions that are found in DOM or in text
+                const beforeMentions = [...mentions.value];
                 mentions.value = mentions.value.filter(mention => {
-                    if (!mention || !mention.id) {
-                        // If mention has no ID, check by text match
+                    if (!mention) return false;
+                    
+                    // If mention has no ID, check by text match
+                    if (!mention.id) {
                         const mentionText = `@${mention.name}`;
-                        return text.includes(mentionText);
+                        const found = text.includes(mentionText);
+                        if (!found) {
+                            console.log('ww-chat: Removing mention (no ID, not in text):', mention.name);
+                        }
+                        return found;
                     }
+                    
                     // Check if mention is in DOM or text
-                    return foundMentionIds.has(mention.id) || text.includes(`@${mention.name}`);
+                    const inDOM = foundMentionIds.has(mention.id);
+                    const inText = text.includes(`@${mention.name}`);
+                    const keep = inDOM || inText;
+                    
+                    if (!keep) {
+                        console.log('ww-chat: Removing mention (not in DOM or text):', mention.name, { inDOM, inText });
+                    }
+                    
+                    return keep;
                 });
+                
+                const afterCount = mentions.value.length;
+                if (beforeCount !== afterCount) {
+                    console.log('ww-chat: checkRemovedMentions removed', beforeCount - afterCount, 'mentions');
+                    console.log('ww-chat: Before:', beforeMentions.map(m => m.name));
+                    console.log('ww-chat: After:', mentions.value.map(m => m.name));
+                }
             } else {
                 // For plain text mode, just check text content
+                const beforeMentions = [...mentions.value];
                 mentions.value = mentions.value.filter(mention => {
                     const mentionText = `@${mention.name}`;
-                    return text.includes(mentionText);
+                    const found = text.includes(mentionText);
+                    if (!found) {
+                        console.log('ww-chat: Removing mention (not in text):', mention.name);
+                    }
+                    return found;
                 });
+                
+                const afterCount = mentions.value.length;
+                if (beforeCount !== afterCount) {
+                    console.log('ww-chat: checkRemovedMentions removed', beforeCount - afterCount, 'mentions (plain text)');
+                }
             }
         };
 
@@ -2127,18 +2214,30 @@ export default {
         };
 
         const addMention = (participant, mentionArray) => {
-            const exists = mentionArray.some(m => m.id === participant.id);
-            if (exists) {
+            if (!participant || !participant.id) {
+                console.warn('ww-chat: addMention called with invalid participant:', participant);
                 return mentionArray;
             }
-            return [
+            
+            const exists = mentionArray.some(m => m.id === participant.id);
+            if (exists) {
+                console.log('ww-chat: Mention already exists:', participant.name);
+                return mentionArray;
+            }
+            
+            const newMention = {
+                id: participant.id,
+                name: participant.name,
+                avatar: participant.avatar || '',
+            };
+            
+            console.log('ww-chat: Adding mention:', newMention);
+            const updated = [
                 ...mentionArray,
-                {
-                    id: participant.id,
-                    name: participant.name,
-                    avatar: participant.avatar || '',
-                },
+                newMention,
             ];
+            console.log('ww-chat: Mentions array after add:', updated.map(m => m.name));
+            return updated;
         };
 
         const handleAttachment = event => {
