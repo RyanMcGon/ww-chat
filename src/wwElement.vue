@@ -609,8 +609,16 @@ export default {
                     editingMessage.value = null;
                     setEditingMessageState(null);
                 } else {
-                    // Ensure mentions is always an array (from InputArea parameter)
+                    // Always use mentions parameter from InputArea (contains updated mentions from current edit)
+                    // The mentions parameter is always provided (defaults to []), so use it directly
                     const updatedMentions = Array.isArray(mentions) ? mentions : [];
+                    
+                    // Debug log to verify mentions are being received
+                    if (updatedMentions.length > 0) {
+                        console.log('ww-chat: Using mentions from parameter for edit:', updatedMentions);
+                    } else if (mentions && !Array.isArray(mentions)) {
+                        console.warn('ww-chat: Mentions parameter is not an array:', mentions);
+                    }
 
                     const updatedOriginalData = {
                         ...(messageToEdit._originalData || {}),
