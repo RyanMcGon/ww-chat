@@ -1196,19 +1196,28 @@ export default {
             const extractedMentions = [];
             const seenIds = new Set();
             
-            // Get the current text content (plain text version)
-            const text = plainTextValue.value || inputValue.value || '';
+            // Get the current text content (plain text version for verification)
+            const plainText = plainTextValue.value || '';
+            const markdownText = inputValue.value || '';
             
             // First, extract mentions from DOM spans (for rich text mode)
+            // This is the most reliable source when in rich text mode
             if (props.allowRichText && richInputRef.value) {
                 const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+                console.log('ww-chat: Found', mentionSpans.length, 'mention spans in DOM');
+                
                 mentionSpans.forEach(span => {
                     const mentionId = span.getAttribute('data-mention-id');
                     const mentionText = span.textContent || '';
-                    // Extract name from @name format
-                    const nameMatch = mentionText.match(/^@(.+)$/);
-                    if (nameMatch && mentionId && !seenIds.has(mentionId)) {
-                        const name = nameMatch[1].trim();
+                    console.log('ww-chat: Processing mention span:', { mentionId, mentionText });
+                    
+                    // Extract name from @name format (handle cases with/without @)
+                    let name = mentionText.trim();
+                    if (name.startsWith('@')) {
+                        name = name.substring(1).trim();
+                    }
+                    
+                    if (name && mentionId && !seenIds.has(mentionId)) {
                         // Find participant to get full data
                         const participant = props.participants?.find(p => p.id === mentionId);
                         if (participant) {
@@ -1217,6 +1226,7 @@ export default {
                                 name: participant.name || name,
                             });
                             seenIds.add(participant.id);
+                            console.log('ww-chat: Added mention from DOM:', participant.name);
                         } else {
                             // Fallback: use what we have
                             extractedMentions.push({
@@ -1224,28 +1234,40 @@ export default {
                                 name: name,
                             });
                             seenIds.add(mentionId);
+                            console.log('ww-chat: Added mention from DOM (fallback):', name);
                         }
                     }
                 });
             }
             
-            // Also check mentions.value array and verify they exist in the text
-            // This ensures we catch mentions that might have been added but not yet in DOM
+            // Also check mentions.value array - this is important for plain text mode
+            // and as a fallback for rich text mode
             if (mentions.value && Array.isArray(mentions.value)) {
+                console.log('ww-chat: Checking mentions.value array:', mentions.value.length, 'mentions');
                 mentions.value.forEach(mention => {
                     if (!mention || !mention.id) return;
                     
                     // Skip if we already have this mention from DOM extraction
-                    if (seenIds.has(mention.id)) return;
+                    if (seenIds.has(mention.id)) {
+                        console.log('ww-chat: Skipping mention (already in DOM):', mention.name);
+                        return;
+                    }
                     
                     // Verify the mention text exists in the content
+                    // Check both plain text and markdown (mentions should appear in both)
                     const mentionText = `@${mention.name}`;
-                    if (text.includes(mentionText)) {
+                    const mentionPattern = mentionText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(mentionPattern, 'g');
+                    
+                    if (regex.test(plainText) || regex.test(markdownText)) {
                         extractedMentions.push({
                             id: mention.id,
                             name: mention.name,
                         });
                         seenIds.add(mention.id);
+                        console.log('ww-chat: Added mention from array:', mention.name);
+                    } else {
+                        console.log('ww-chat: Mention not found in text:', mention.name, { plainText, markdownText });
                     }
                 });
             }
@@ -1259,17 +1281,20 @@ export default {
                     
                     const mentionPattern = `@${participant.name}`;
                     // Check if mention exists in text with proper word boundaries
-                    const regex = new RegExp(`(^|\\s)${mentionPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$|[,.!?:;])`, 'g');
-                    if (regex.test(text)) {
+                    const escapedPattern = mentionPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`(^|\\s)${escapedPattern}(\\s|$|[,.!?:;])`, 'g');
+                    if (regex.test(plainText) || regex.test(markdownText)) {
                         extractedMentions.push({
                             id: participant.id,
                             name: participant.name,
                         });
                         seenIds.add(participant.id);
+                        console.log('ww-chat: Added mention from text scan:', participant.name);
                     }
                 });
             }
             
+            console.log('ww-chat: Final extracted mentions:', extractedMentions);
             return extractedMentions;
         };
 
