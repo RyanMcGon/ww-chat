@@ -1018,6 +1018,7 @@ export default {
             (newMessage) => {
                 if (newMessage) {
                     inputValue.value = newMessage.text || '';
+                    mentions.value = newMessage.mentions ? [...newMessage.mentions] : [];
                     if (props.allowRichText) {
                         syncRichEditor(false);
                         nextTick(() => {
