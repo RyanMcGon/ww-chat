@@ -617,7 +617,7 @@ export default {
                         userName: messageToEdit.userName,
                         timestamp: messageToEdit.timestamp,
                         attachments: messageToEdit.attachments,
-                        mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
+                        mentions: mentions,
                         userSettings: messageToEdit.userSettings,
                     };
 
@@ -628,7 +628,7 @@ export default {
                         userName: messageToEdit.userName,
                         timestamp: new Date().toISOString(),
                         attachments: messageToEdit.attachments,
-                        mentions: currentMentions.value.length > 0 ? currentMentions.value : messageToEdit.mentions,
+                        mentions: mentions,
                         userSettings: messageToEdit.userSettings,
                         _originalData: {
                             ...updatedOriginalData,
