@@ -1192,10 +1192,67 @@ export default {
             }
         };
 
+        const extractMentionsFromContent = () => {
+            const extractedMentions = [];
+            
+            if (props.allowRichText && richInputRef.value) {
+                // Extract mentions from rich text HTML DOM
+                const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+                mentionSpans.forEach(span => {
+                    const mentionId = span.getAttribute('data-mention-id');
+                    const mentionText = span.textContent || '';
+                    // Extract name from @name format
+                    const nameMatch = mentionText.match(/^@(.+)$/);
+                    if (nameMatch && mentionId) {
+                        const name = nameMatch[1].trim();
+                        // Find participant to get full data
+                        const participant = props.participants?.find(p => p.id === mentionId);
+                        if (participant) {
+                            extractedMentions.push({
+                                id: participant.id,
+                                name: participant.name || name,
+                            });
+                        } else {
+                            // Fallback: use what we have
+                            extractedMentions.push({
+                                id: mentionId,
+                                name: name,
+                            });
+                        }
+                    }
+                });
+            } else {
+                // For plain text mode, use mentions.value which should be in sync
+                // But also verify against the actual text content
+                const text = plainTextValue.value || inputValue.value || '';
+                mentions.value.forEach(mention => {
+                    const mentionText = `@${mention.name}`;
+                    if (text.includes(mentionText)) {
+                        extractedMentions.push(mention);
+                    }
+                });
+            }
+            
+            // Remove duplicates based on ID
+            const uniqueMentions = [];
+            const seenIds = new Set();
+            extractedMentions.forEach(mention => {
+                if (mention.id && !seenIds.has(mention.id)) {
+                    seenIds.add(mention.id);
+                    uniqueMentions.push(mention);
+                }
+            });
+            
+            return uniqueMentions;
+        };
+
         const sendMessage = () => {
             if (isEditing.value || !canSend.value || props.isDisabled) return;
 
-            emit('send', mentions.value);
+            // Extract mentions from current content state to ensure accuracy
+            const currentMentions = extractMentionsFromContent();
+            
+            emit('send', currentMentions);
             inputValue.value = '';
             plainTextValue.value = '';
             mentions.value = [];
