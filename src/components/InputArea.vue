@@ -1361,14 +1361,32 @@ export default {
             
             // Also check mentions.value array - this is important for plain text mode
             // and as a fallback for rich text mode
+            // IMPORTANT: This is critical for new mentions added during editing
             if (mentions.value && Array.isArray(mentions.value)) {
                 console.log('ww-chat: Checking mentions.value array:', mentions.value.length, 'mentions');
                 mentions.value.forEach(mention => {
-                    if (!mention || !mention.id) return;
+                    if (!mention || !mention.name) return;
                     
-                    // Skip if we already have this mention from DOM extraction
-                    if (seenIds.has(mention.id)) {
-                        console.log('ww-chat: Skipping mention (already in DOM):', mention.name);
+                    // Try to get or find the ID for this mention
+                    let mentionId = mention.id;
+                    if (!mentionId && mention.name) {
+                        // Try to find participant by name to get ID
+                        const participant = props.participants?.find(p => p.name === mention.name);
+                        if (participant && participant.id) {
+                            mentionId = participant.id;
+                        }
+                    }
+                    
+                    // Skip if we already have this mention from DOM extraction (by ID or name)
+                    if (mentionId && seenIds.has(mentionId)) {
+                        console.log('ww-chat: Skipping mention (already in DOM by ID):', mention.name);
+                        return;
+                    }
+                    
+                    // Also check if we already have a mention with this name
+                    const alreadyHaveByName = extractedMentions.some(m => m.name === mention.name);
+                    if (alreadyHaveByName) {
+                        console.log('ww-chat: Skipping mention (already in DOM by name):', mention.name);
                         return;
                     }
                     
@@ -1378,15 +1396,26 @@ export default {
                     const mentionPattern = mentionText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(mentionPattern, 'g');
                     
-                    if (regex.test(plainText) || regex.test(markdownText)) {
-                        extractedMentions.push({
-                            id: mention.id,
-                            name: mention.name,
-                        });
-                        seenIds.add(mention.id);
-                        console.log('ww-chat: Added mention from array:', mention.name);
+                    const inPlainText = regex.test(plainText);
+                    const inMarkdown = regex.test(markdownText);
+                    
+                    if (inPlainText || inMarkdown) {
+                        if (mentionId) {
+                            extractedMentions.push({
+                                id: mentionId,
+                                name: mention.name,
+                            });
+                            seenIds.add(mentionId);
+                            console.log('ww-chat: Added mention from array:', mention.name, { hadId: !!mention.id, foundId: true });
+                        } else {
+                            // Mention exists in text but has no ID - add it anyway (will be matched by name in formatter)
+                            extractedMentions.push({
+                                name: mention.name,
+                            });
+                            console.log('ww-chat: Added mention from array (no ID, matched by name):', mention.name);
+                        }
                     } else {
-                        console.log('ww-chat: Mention not found in text:', mention.name, { plainText, markdownText });
+                        console.log('ww-chat: Mention not found in text:', mention.name, { plainText, markdownText, inPlainText, inMarkdown });
                     }
                 });
             }
@@ -2279,9 +2308,22 @@ export default {
         };
 
         const addMention = (participant, mentionArray) => {
-            if (!participant || !participant.id) {
+            if (!participant) {
                 console.warn('ww-chat: addMention called with invalid participant:', participant);
                 return mentionArray;
+            }
+            
+            // Ensure participant has an ID - this is critical for mentions to work
+            if (!participant.id) {
+                console.warn('ww-chat: Participant has no ID:', participant.name);
+                // Try to find participant from props to get ID
+                const foundParticipant = props.participants?.find(p => p.name === participant.name);
+                if (foundParticipant && foundParticipant.id) {
+                    participant = { ...participant, id: foundParticipant.id };
+                } else {
+                    console.error('ww-chat: Cannot add mention without ID:', participant.name);
+                    return mentionArray;
+                }
             }
             
             const exists = mentionArray.some(m => m.id === participant.id);
@@ -2301,7 +2343,7 @@ export default {
                 ...mentionArray,
                 newMention,
             ];
-            console.log('ww-chat: Mentions array after add:', updated.map(m => m.name));
+            console.log('ww-chat: Mentions array after add:', updated.map(m => ({ name: m.name, id: m.id })));
             return updated;
         };
 
