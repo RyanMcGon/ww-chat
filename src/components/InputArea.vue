@@ -1088,6 +1088,7 @@ export default {
                     });
                     
                     if (props.allowRichText) {
+                        // Don't call checkRemovedMentions during initial sync - wait until after spans are created
                         syncRichEditor(false);
                         nextTick(() => {
                             if (richInputRef.value) {
@@ -1102,6 +1103,10 @@ export default {
                                         id: id
                                     });
                                 });
+                                
+                                // Now that spans are created, we can safely check for removed mentions
+                                // But only if there's a mismatch between mentions and text
+                                checkRemovedMentions();
                                 
                                 focusTextarea();
                                 setCaretOffsetInRich(plainTextValue.value.length);
@@ -1118,6 +1123,8 @@ export default {
                                 updateSelection();
                                 adjustTextareaHeight();
                             }
+                            // For plain text, check removed mentions after setting up
+                            checkRemovedMentions();
                             processMentionState(plainTextValue.value, plainTextValue.value.length);
                         });
                     }
@@ -1863,6 +1870,11 @@ export default {
             const text = plainTextValue.value || '';
             const beforeCount = mentions.value.length;
             
+            // Skip if no mentions to check
+            if (beforeCount === 0) {
+                return;
+            }
+            
             // For rich text mode, also check DOM for mention spans
             // This is more reliable than just checking text, as spans preserve mention data
             if (props.allowRichText && richInputRef.value) {
@@ -1910,6 +1922,8 @@ export default {
                 });
                 
                 // Keep mentions that are found in DOM or in text
+                // IMPORTANT: If DOM has spans, prioritize DOM over text matching
+                // This prevents removing valid mentions that are in DOM but text hasn't been updated yet
                 const beforeMentions = [...mentions.value];
                 mentions.value = mentions.value.filter(mention => {
                     if (!mention) return false;
@@ -1924,13 +1938,14 @@ export default {
                         return found;
                     }
                     
-                    // Check if mention is in DOM or text
+                    // Check if mention is in DOM first (most reliable)
                     const inDOM = foundMentionIds.has(mention.id);
-                    const inText = text.includes(`@${mention.name}`);
+                    // Only check text if not in DOM (to avoid false negatives during sync)
+                    const inText = inDOM ? true : text.includes(`@${mention.name}`);
                     const keep = inDOM || inText;
                     
                     if (!keep) {
-                        console.log('ww-chat: Removing mention (not in DOM or text):', mention.name, { inDOM, inText });
+                        console.log('ww-chat: Removing mention (not in DOM or text):', mention.name, { inDOM, inText, text });
                     }
                     
                     return keep;
