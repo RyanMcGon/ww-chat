@@ -1587,9 +1587,59 @@ export default {
         const handleRichInput = () => {
             if (!props.allowRichText || !richInputRef.value || isSyncingRich.value) return;
             
+            // First, ensure all mention spans in DOM are tracked in mentions.value
+            // This is critical - if a mention span exists but isn't in mentions.value,
+            // it will be lost when syncRichEditor recreates the HTML
+            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
+            mentionSpans.forEach(span => {
+                const mentionId = span.getAttribute('data-mention-id');
+                const spanText = span.textContent || '';
+                const nameMatch = spanText.match(/^@(.+)$/);
+                const name = nameMatch ? nameMatch[1].trim() : '';
+                
+                if (name) {
+                    if (mentionId) {
+                        // Check if this mention is already in the array
+                        const exists = mentions.value.some(m => m.id === mentionId);
+                        if (!exists) {
+                            // Find participant to get full data
+                            const participant = props.participants?.find(p => p.id === mentionId);
+                            if (participant) {
+                                mentions.value.push({
+                                    id: participant.id,
+                                    name: participant.name,
+                                    avatar: participant.avatar || '',
+                                });
+                            } else {
+                                // Fallback: add with just ID and name
+                                mentions.value.push({ id: mentionId, name: name });
+                            }
+                        }
+                    } else {
+                        // Span doesn't have ID, try to find by name
+                        const exists = mentions.value.some(m => m.name === name);
+                        if (!exists) {
+                            // Try to find participant by name
+                            const participant = props.participants?.find(p => p.name === name);
+                            if (participant && participant.id) {
+                                mentions.value.push({
+                                    id: participant.id,
+                                    name: participant.name,
+                                    avatar: participant.avatar || '',
+                                });
+                                // Restore the data-mention-id attribute
+                                span.setAttribute('data-mention-id', participant.id);
+                            } else {
+                                // Add without ID (will be fixed later)
+                                mentions.value.push({ name: name });
+                            }
+                        }
+                    }
+                }
+            });
+            
             // Only clean up mention spans if we detect they have extra content
             // This prevents interference with normal typing
-            const mentionSpans = richInputRef.value.querySelectorAll('.ww-message-item__mention');
             let needsCleanup = false;
             for (const span of mentionSpans) {
                 const text = span.textContent || '';
