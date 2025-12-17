@@ -1453,9 +1453,9 @@ export default {
                 });
             }
             
-            // Final step: ensure all extracted mentions have IDs if possible and names match text exactly
+            // Final step: ensure all extracted mentions have IDs if possible
             // This is critical for mentions to work properly in MessageItem
-            // The formatter uses exact string matching: @${mention.name} must exist in text
+            // Note: If a mention was found in the DOM, we trust it's valid even if text hasn't synced yet
             const finalMentions = extractedMentions.map(mention => {
                 if (!mention || !mention.name) return null;
                 
@@ -1463,25 +1463,37 @@ export default {
                 const normalizedName = mention.name.trim();
                 if (!normalizedName) return null;
                 
-                // Verify the mention actually exists in the text (exact match required)
-                // The formatter uses exact string matching, so the name must match exactly
+                // If mention was extracted from DOM, trust it's valid (don't validate against text)
+                // This is important because text might not be synced yet when sending
+                // The mention is already in the DOM, so it will be in the final message text
                 const mentionPattern = `@${normalizedName}`;
                 const inPlainText = plainText.includes(mentionPattern);
                 const inMarkdown = markdownText.includes(mentionPattern);
                 
-                if (!inPlainText && !inMarkdown) {
-                    console.warn('ww-chat: Mention name does not match text:', normalizedName, { 
+                // Check if mention is in DOM (if it was extracted from DOM, it should be)
+                const inDOM = props.allowRichText && richInputRef.value && 
+                    (richInputRef.value.querySelector(`.ww-message-item__mention[data-mention-id="${mention.id || ''}"]`) ||
+                     richInputRef.value.textContent?.includes(mentionPattern));
+                
+                // Only filter out if mention is not in text AND not in DOM (truly invalid)
+                // If it's in DOM, we trust it even if text hasn't synced yet
+                if (!inPlainText && !inMarkdown && !inDOM) {
+                    console.warn('ww-chat: Mention not found in text or DOM, filtering out:', normalizedName, { 
                         plainText, 
                         markdownText,
                         lookingFor: mentionPattern,
-                        plainTextContains: plainText.includes(mentionPattern),
-                        markdownContains: markdownText.includes(mentionPattern)
+                        hasId: !!mention.id
                     });
-                    return null; // Don't include mentions that don't exist in text
+                    return null;
                 }
                 
-                // Log successful match for debugging
-                console.log('ww-chat: Mention validated in text:', normalizedName, { inPlainText, inMarkdown });
+                // Log successful validation for debugging
+                console.log('ww-chat: Mention validated:', normalizedName, { 
+                    inPlainText, 
+                    inMarkdown, 
+                    inDOM: !!inDOM,
+                    hasId: !!mention.id
+                });
                 
                 // If mention already has an ID, use it
                 if (mention.id) {
