@@ -611,13 +611,39 @@ export default {
                 } else {
                     // Always use mentions parameter from InputArea (contains updated mentions from current edit)
                     // The mentions parameter is always provided (defaults to []), so use it directly
-                    const updatedMentions = Array.isArray(mentions) ? mentions : [];
+                    // Ensure mentions are properly formatted with id and name properties
+                    const updatedMentions = Array.isArray(mentions) 
+                        ? mentions.map(mention => {
+                            // Ensure each mention has the required properties
+                            if (!mention || typeof mention !== 'object') return null;
+                            // Only include mentions that have a name (required for formatter)
+                            if (!mention.name) return null;
+                            // Prefer to have an ID, but name is required
+                            return {
+                                ...(mention.id ? { id: mention.id } : {}),
+                                name: mention.name,
+                                ...(mention.avatar ? { avatar: mention.avatar } : {}),
+                            };
+                        }).filter(m => m && m.name) // Remove invalid mentions
+                        : [];
                     
                     // Debug log to verify mentions are being received
                     if (updatedMentions.length > 0) {
                         console.log('ww-chat: Using mentions from parameter for edit:', updatedMentions);
+                        console.log('ww-chat: Updated message will have mentions:', updatedMentions.map(m => ({ id: m.id, name: m.name })));
+                        console.log('ww-chat: Message text:', trimmedMessageText);
+                        // Verify each mention exists in the text
+                        updatedMentions.forEach(m => {
+                            const pattern = `@${m.name}`;
+                            const exists = trimmedMessageText.includes(pattern);
+                            console.log(`ww-chat: Mention "${m.name}" ${exists ? 'EXISTS' : 'NOT FOUND'} in text`);
+                        });
                     } else if (mentions && !Array.isArray(mentions)) {
                         console.warn('ww-chat: Mentions parameter is not an array:', mentions);
+                    } else if (mentions && Array.isArray(mentions) && mentions.length > 0) {
+                        console.warn('ww-chat: Mentions were filtered out (missing name):', mentions);
+                    } else {
+                        console.log('ww-chat: No mentions in updated message');
                     }
 
                     const updatedOriginalData = {
@@ -651,6 +677,15 @@ export default {
                     editingMessage.value = null;
                     setEditingMessageState(null);
 
+                    // Log the exact message structure being emitted
+                    console.log('ww-chat: Emitting messageEdit event with message:', {
+                        id: updatedMessage.id,
+                        text: updatedMessage.text,
+                        mentions: updatedMessage.mentions,
+                        mentionsCount: updatedMessage.mentions.length,
+                        mentionsDetails: updatedMessage.mentions.map(m => ({ id: m.id, name: m.name }))
+                    });
+                    
                     emit('trigger-event', {
                         name: 'messageEdit',
                         event: { message: updatedMessage },

@@ -1408,11 +1408,22 @@ export default {
                             seenIds.add(mentionId);
                             console.log('ww-chat: Added mention from array:', mention.name, { hadId: !!mention.id, foundId: true });
                         } else {
-                            // Mention exists in text but has no ID - add it anyway (will be matched by name in formatter)
-                            extractedMentions.push({
-                                name: mention.name,
-                            });
-                            console.log('ww-chat: Added mention from array (no ID, matched by name):', mention.name);
+                            // Mention exists in text but has no ID - try one more time to find participant
+                            const participant = props.participants?.find(p => p.name === mention.name);
+                            if (participant && participant.id) {
+                                extractedMentions.push({
+                                    id: participant.id,
+                                    name: participant.name,
+                                });
+                                seenIds.add(participant.id);
+                                console.log('ww-chat: Added mention from array (found ID from participant):', participant.name);
+                            } else {
+                                // Last resort: add without ID (formatter can match by name, but this is not ideal)
+                                extractedMentions.push({
+                                    name: mention.name,
+                                });
+                                console.log('ww-chat: Added mention from array (no ID, matched by name only):', mention.name);
+                            }
                         }
                     } else {
                         console.log('ww-chat: Mention not found in text:', mention.name, { plainText, markdownText, inPlainText, inMarkdown });
@@ -1442,8 +1453,81 @@ export default {
                 });
             }
             
-            console.log('ww-chat: Final extracted mentions:', extractedMentions);
-            return extractedMentions;
+            // Final step: ensure all extracted mentions have IDs if possible and names match text exactly
+            // This is critical for mentions to work properly in MessageItem
+            // The formatter uses exact string matching: @${mention.name} must exist in text
+            const finalMentions = extractedMentions.map(mention => {
+                if (!mention || !mention.name) return null;
+                
+                // Normalize the mention name (trim whitespace)
+                const normalizedName = mention.name.trim();
+                if (!normalizedName) return null;
+                
+                // Verify the mention actually exists in the text (exact match required)
+                // The formatter uses exact string matching, so the name must match exactly
+                const mentionPattern = `@${normalizedName}`;
+                const inPlainText = plainText.includes(mentionPattern);
+                const inMarkdown = markdownText.includes(mentionPattern);
+                
+                if (!inPlainText && !inMarkdown) {
+                    console.warn('ww-chat: Mention name does not match text:', normalizedName, { 
+                        plainText, 
+                        markdownText,
+                        lookingFor: mentionPattern,
+                        plainTextContains: plainText.includes(mentionPattern),
+                        markdownContains: markdownText.includes(mentionPattern)
+                    });
+                    return null; // Don't include mentions that don't exist in text
+                }
+                
+                // Log successful match for debugging
+                console.log('ww-chat: Mention validated in text:', normalizedName, { inPlainText, inMarkdown });
+                
+                // If mention already has an ID, use it
+                if (mention.id) {
+                    return {
+                        id: mention.id,
+                        name: normalizedName, // Use normalized name
+                    };
+                }
+                
+                // Try to find participant by name to get ID
+                // Match by exact name or trimmed name (handle whitespace differences)
+                const participant = props.participants?.find(p => {
+                    const pName = p.name?.trim() || '';
+                    return pName === normalizedName || p.name === normalizedName;
+                });
+                if (participant && participant.id) {
+                    // Use the participant's exact name from props (this ensures it matches what's in the text)
+                    // But first verify the participant's name exists in the text
+                    const participantPattern = `@${participant.name}`;
+                    const participantInText = plainText.includes(participantPattern) || markdownText.includes(participantPattern);
+                    
+                    if (participantInText) {
+                        return {
+                            id: participant.id,
+                            name: participant.name, // Use participant's exact name
+                        };
+                    } else {
+                        // Participant name doesn't match text exactly - use normalized name
+                        console.warn('ww-chat: Participant name does not match text exactly:', participant.name, 'vs', normalizedName);
+                        return {
+                            id: participant.id,
+                            name: normalizedName, // Use normalized name that exists in text
+                        };
+                    }
+                }
+                
+                // Last resort: return mention without ID (formatter can match by name)
+                // But only if it exists in text
+                return {
+                    name: normalizedName,
+                };
+            }).filter(m => m !== null);
+            
+            console.log('ww-chat: Final extracted mentions:', finalMentions);
+            console.log('ww-chat: Final mentions details:', finalMentions.map(m => ({ id: m.id, name: m.name, inText: plainText.includes(`@${m.name}`) || markdownText.includes(`@${m.name}`) })));
+            return finalMentions;
         };
 
         const sendMessage = () => {
