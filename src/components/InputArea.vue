@@ -1543,12 +1543,36 @@ export default {
         };
 
         const sendMessage = () => {
-            if (isEditing.value || !canSend.value || props.isDisabled) return;
+            if (isEditing.value || props.isDisabled) {
+                console.warn('ww-chat: sendMessage blocked by isEditing or isDisabled', {
+                    isEditing: isEditing.value,
+                    isDisabled: props.isDisabled
+                });
+                return;
+            }
 
-            // For rich text mode, ensure we sync the latest content before extracting mentions
+            // For rich text mode, ensure we sync the latest content before checking canSend
+            // This is critical because plainTextValue might not be updated yet
             if (props.allowRichText && richInputRef.value) {
                 // Trigger a sync to ensure plainTextValue is up to date
                 handleRichInput();
+            }
+            
+            // Check canSend after syncing (for rich text) or use current state (for plain text)
+            // Also allow sending if there are mentions, even if text appears empty
+            // (mentions might be in DOM but not yet in plainTextValue)
+            const hasMentions = mentions.value && mentions.value.length > 0;
+            const canSendNow = canSend.value || hasMentions;
+            
+            if (!canSendNow) {
+                console.warn('ww-chat: sendMessage blocked by canSend check', {
+                    canSend: canSend.value,
+                    hasMentions: hasMentions,
+                    plainTextValue: plainTextValue.value,
+                    inputValue: inputValue.value,
+                    mentionsCount: mentions.value?.length || 0
+                });
+                return;
             }
             
             // Extract mentions from current content state to ensure accuracy
@@ -1559,6 +1583,7 @@ export default {
                 console.log('ww-chat: Extracted mentions for send:', currentMentions);
             }
             
+            console.log('ww-chat: Emitting send event with mentions:', currentMentions);
             emit('send', currentMentions);
             inputValue.value = '';
             plainTextValue.value = '';
